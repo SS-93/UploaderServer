@@ -12,9 +12,9 @@ s3Url:{ type: String,
 uploadDate: {
     type: Date,
     default: Date.now,
-}
+},
 
-})
+}); 
 
 
 module.exports = mongoose.model ("Upload", uploadSchema);

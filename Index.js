@@ -37,7 +37,7 @@ app.use(express.json());
 app.use(require("cors")());
 
 app.use("/new", ClaimFile);
-app.use(uploadRoutes)
+app.use('/dms', uploadRoutes)
 
 // app.use("/find", ClaimsRouter)
 
