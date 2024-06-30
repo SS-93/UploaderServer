@@ -1,5 +1,9 @@
 const router = require("express").Router();
 const { ObjectId } = require('mongodb');
+const multer = require ('multer')
+const {uploadFile, getFileStream} = require('../S3')
+const upload = multer ({ dest: 'uploads/'})
+
 
 const Claim = require('../Models/claims.model');
 
@@ -63,5 +67,43 @@ router.get('/find/:id', async (req, res) => {
         res.status(400).json({ error: 'Invalid ID format' });
     }
 });
+
+
+// Upload Document to Claim
+
+router.post('/claims/:claimId/documents', upload.single('document'), async (req, res) => {
+    const file = req.file;
+    const { claimId } = req.params;
+    
+    if(!file) {
+        return res.status(400).json({error: 'File is Missing'})
+    }
+
+    try { 
+        
+        const result = await uploadFile(file);
+        const claim = await Claim.findById(claimId);
+        const newDocument = {
+            fileName: file.originalname,
+            fileUrl: result.Location
+        };
+
+        claim.documents.push(newDocument);
+        await claim.save();
+        res.json(newDocument);
+
+    } catch (err) {
+        console.error('Error uploading to S3', err);
+        res.status(500).json({error: 'Failed to upload to S3'})
+        
+    }
+});
+
+// Get Documents from S3 
+router.get ('doccuments/:key', (req, res) => {
+    const key = req.params.key;
+    const readStream = getFileStream(key);
+    readStream.pipe(res)
+})
 
 module.exports = router;

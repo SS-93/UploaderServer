@@ -1,6 +1,15 @@
 const mongoose = require ('mongoose')
 
 
+const DocumentSchema = new mongoose.Schema ({
+    fileName: String,
+    fileUrl: String,
+    uploadDate: {
+        type: Date,
+        default: Date.now
+    }
+});
+
 
 const ClaimSchema = new mongoose.Schema({
 
@@ -14,6 +23,7 @@ const ClaimSchema = new mongoose.Schema({
 
     adjuster: { type: String,
     required: false},
+    documents: [DocumentSchema],
 
 
 });
