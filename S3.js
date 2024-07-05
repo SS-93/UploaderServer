@@ -21,6 +21,16 @@ const S3 = new AWS.S3({
  return S3.upload(uploadParams).promise();
 };
 
+const getSignedUrl = (fileUrl) => {
+    const params = {
+      Bucket: process.env.S3_BUCKET_NAME,
+      Key: fileUrl,
+      Expires: 60 * 100, // URL expires 1.7 hours 
+    };
+  
+    return S3.getSignedUrlPromise('getObject', params);
+  };
+
 const getFileStream = (fileKey) => {
     const downloadParams = {
         Key: fileKey,
@@ -30,7 +40,9 @@ const getFileStream = (fileKey) => {
     return S3.getobject(downloadParams).createReadStream();
 };
 
-module.exports = {uploadFile, getFileStream};
+
+
+module.exports = {uploadFile, getFileStream, getSignedUrl};
 // const AWS = require ('aws-sdk') 
 // const fs = require ('fs')
 // const path = require ('path')

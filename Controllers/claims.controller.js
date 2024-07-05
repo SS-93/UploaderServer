@@ -68,6 +68,30 @@ router.get('/find/:id', async (req, res) => {
     }
 });
 
+// New Claims
+router.post('/claims', async (req, res) => {
+    try {
+        const claimFile = {
+            claimnumber: req.body.claimnumber,
+            name: req.body.name,
+            date: req.body.date,
+            adjuster: req.body.adjuster,
+        };
+
+        const claim = new Claim(claimFile);
+
+        const newClaim = await claim.save();
+
+        res.status(200).json({
+            message: 'New Claim Filed!',
+            order: newClaim,
+        });
+
+    } catch (err) {
+        errorResponse(res, err);
+    }
+});
+
 //Find Claim Documents by Id
 
 router.get('/claims/:claimId/documents', async (req, res) => {

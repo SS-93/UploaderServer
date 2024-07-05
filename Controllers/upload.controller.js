@@ -1,7 +1,7 @@
 // Controllers/upload.controller.js
 const multer = require('multer');
 const Upload = require('../Models/upload.model'); // Adjust the path to your actual model file
-const { uploadFile, getFileStream } = require('../S3');
+const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 
 // Configure multer to use a specific destination
 const upload = multer({ dest: 'uploads/' });
@@ -17,12 +17,14 @@ exports.uploadSingleFile = async (req, res) => {
     const result = await uploadFile(file); // Upload to S3
     console.log('S3 Upload Result', result);
 
+    const signedUrl = getSignedUrl(result.Key); // Generate signed URL
+
     const newUpload = new Upload({
       filename: file.filename,
       originalName: file.originalname,
-      fileUrl: result.Location, // Save the S3 URL
+      fileUrl: signedUrl, // Save the signed URL
+      claimId: req.body.claimId, // Ensure claimId is passed and saved
     });
-
     await newUpload.save();
 
     res.status(200).json({ message: 'File uploaded successfully', file: newUpload });
@@ -37,6 +39,10 @@ exports.handleGetImage = (req, res) => {
   const readStream = getFileStream(key);
   readStream.pipe(res);
 };
+
+
+
+
 
 // Export the multer middleware
 exports.uploadMiddleware = upload.single('document');
