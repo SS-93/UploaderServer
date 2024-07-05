@@ -1,39 +1,39 @@
 const router = require("express").Router();
 const { ObjectId } = require('mongodb');
-const multer = require ('multer')
-const {uploadFile, getFileStream} = require('../S3')
-const upload = multer ({ dest: 'uploads/'})
-
-
+const multer = require('multer');
+const { uploadFile, getFileStream } = require('../S3');
 const Claim = require('../Models/claims.model');
 
-function errorResponse(res, err) {
-    res.status(500).json({
-        Error: err.message,
-    });
-}
+const upload = multer({ dest: 'uploads/' });
 
-// New Claims
-router.post('/claims', async (req, res) => {
+const errorResponse = (res, err) => {
+    res.status(500).json({ Error: err.message });
+};
+
+router.post('/claims/:claimId/documents', upload.single('document'), async (req, res) => {
+    const file = req.file;
+    const { claimId } = req.params;
+    const { fileName } = req.body;
+
+    if (!file) {
+        return res.status(400).json({ error: 'File is Missing' });
+    }
+
     try {
-        const claimFile = {
-            claimnumber: req.body.claimnumber,
-            name: req.body.name,
-            date: req.body.date,
-            adjuster: req.body.adjuster,
+        const result = await uploadFile(file);
+        const claim = await Claim.findById(claimId);
+
+        const newDocument = {
+            fileName: fileName || file.originalname,
+            fileUrl: result.Location,
         };
 
-        const claim = new Claim(claimFile);
-
-        const newClaim = await claim.save();
-
-        res.status(200).json({
-            message: 'New Claim Filed!',
-            order: newClaim,
-        });
-
+        claim.documents.push(newDocument);
+        await claim.save();
+        res.json(newDocument);
     } catch (err) {
-        errorResponse(res, err);
+        console.error('Error uploading to S3', err);
+        res.status(500).json({ error: 'Failed to upload to S3' });
     }
 });
 
@@ -68,42 +68,25 @@ router.get('/find/:id', async (req, res) => {
     }
 });
 
+//Find Claim Documents by Id
 
-// Upload Document to Claim
-
-router.post('/claims/:claimId/documents', upload.single('document'), async (req, res) => {
-    const file = req.file;
-    const { claimId } = req.params;
-    
-    if(!file) {
-        return res.status(400).json({error: 'File is Missing'})
-    }
-
-    try { 
-        
-        const result = await uploadFile(file);
-        const claim = await Claim.findById(claimId);
-        const newDocument = {
-            fileName: file.originalname,
-            fileUrl: result.Location
-        };
-
-        claim.documents.push(newDocument);
-        await claim.save();
-        res.json(newDocument);
-
+router.get('/claims/:claimId/documents', async (req, res) => {
+    try {
+        const { claimId } = req.params;
+        const claim = await Claim.findById(claimId).populate('documents');
+        if (!claim) {
+            return res.status(404).json({ message: 'Claim not found' });
+        }
+        res.status(200).json(claim.documents);
     } catch (err) {
-        console.error('Error uploading to S3', err);
-        res.status(500).json({error: 'Failed to upload to S3'})
-        
+        errorResponse(res, err);
     }
 });
 
-// Get Documents from S3 
-router.get ('doccuments/:key', (req, res) => {
+router.get('/documents/:key', (req, res) => {
     const key = req.params.key;
     const readStream = getFileStream(key);
-    readStream.pipe(res)
-})
+    readStream.pipe(res);
+});
 
 module.exports = router;
