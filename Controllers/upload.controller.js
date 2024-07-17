@@ -74,14 +74,15 @@ exports.handleGetFile = (req, res) => {
   }
 };
 
-// exports.getSignedUrl = async (req, res) => {
-//   const key = req.params.key;
-//   try { const url = await getSignedUrl(key)
-// res.status(200).json({url});    
-//   } catch (error) {
-//     res.status(500).json({error:'Failed to get signed URL'})
+exports.getSignedUrl = async (req, res) => {
+  const key = req.params.key;
+  try { const url = await getSignedUrl(key)
+res.status(200).json({url});    
+  } catch (error) {
+    res.status(500).json({error:'Failed to get signed URL'})
     
-//   }
+  }
+}
 // }
 
 // exports.handleGetFile = (req, res) => {
@@ -510,4 +511,4 @@ exports.uploadMiddleware = upload.single('document');
 //     } catch (error) {
 //       console.error("Failed to upload test file", error);
 //     }
-//   })();
+//   })()

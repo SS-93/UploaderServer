@@ -16,12 +16,13 @@ const S3 = new AWS.S3({
     const uploadParams = {
        Bucket: process.env.S3_BUCKET_NAME,
        Body: fileStream,
-       Key: path.basename(file.path)
+       Key: path.basename(file.path), 
+      //  ACL: 'public-read'
  };
  return S3.upload(uploadParams).promise();
 };
 
-const getSignedUrl = (fileKey) => {
+const getSignedUrl = (fileUrl) => {
     const params = {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: fileUrl,
