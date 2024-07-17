@@ -5,6 +5,9 @@ const uploadController = require('../Controllers/upload.controller');
 // Define the upload route
 router.post('/upload', uploadController.uploadMiddleware, uploadController.uploadSingleFile);
 router.get('/images/:key', uploadController.handleGetImage);
+router.get('/documents/:key', uploadController.handleGetFile);
+
+
 
 module.exports = router;
 

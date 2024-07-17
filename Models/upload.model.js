@@ -4,6 +4,7 @@ const UploadSchema = new mongoose.Schema({
   filename: { type: String, required: true },
   originalName: { type: String, required: true },
   fileUrl: { type: String, required: true },
+  mimetype: { type: String, required: true},
   uploadDate: { type: Date, default: Date.now },
   claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim', required: true }
 });

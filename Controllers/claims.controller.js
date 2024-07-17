@@ -3,6 +3,7 @@ const { ObjectId } = require('mongodb');
 const multer = require('multer');
 const { uploadFile, getFileStream } = require('../S3');
 const Claim = require('../Models/claims.model');
+const { getSignedUrl } = require('../S3');
 
 const upload = multer({ dest: 'uploads/' });
 
@@ -102,15 +103,64 @@ router.get('/claims/:claimId/documents', async (req, res) => {
             return res.status(404).json({ message: 'Claim not found' });
         }
         res.status(200).json(claim.documents);
+        
     } catch (err) {
         errorResponse(res, err);
     }
 });
 
-router.get('/documents/:key', (req, res) => {
-    const key = req.params.key;
-    const readStream = getFileStream(key);
-    readStream.pipe(res);
+// // Return signed URL for a document
+// router.get('/documents/:key/signed-url', async (req, res) => {
+//     const { key } = req.params;
+//     try {
+//         const url = await getSignedUrl(key);
+//         res.status(200).json({ url });
+//     } catch (err) {
+//         res.status(500).json({ error: 'Failed to get signed URL' });
+//     }
+// });
+
+// Retrieve signed Url for Documents 
+
+
+// router.get('/documents/:key', (req, res) => {
+//     const key = req.params.key;
+//     const readStream = getFileStream(key);
+//     readStream.pipe(res);
+// });
+
+
+
+router.get('/documents/:key', (req, res)=> {
+    try { 
+        const readstream = getFileStream(key);
+        res.setHeader('Content-Disposition', `attachment; filename = "${key}"`)
+        res.setHeader('Content-Type', application/octet-stream)
+        readstream.pipe(res);
+        
+    } catch (error) {
+        console.error('Error Fetching file:', error);
+        res.status(500).json({error:'Failed to fetch file'})
+        
+    }
+})
+//Retrieve signed URL for a document
+
+
+
+router.get('/documents/:key/signed-url', async (req, res)=> {
+    const {key} = req.params;
+    try {
+        const url = await getSignedUrl(key)
+        res.status(200).json({url});
+
+    }catch (err) {
+        res.status(500).json({error: 'Failed to get signed URL'})
+    }
 });
+
+
+
+
 
 module.exports = router;

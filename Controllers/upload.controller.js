@@ -16,13 +16,15 @@ exports.uploadSingleFile = async (req, res) => {
   try {
     const result = await uploadFile(file); // Upload to S3
     console.log('S3 Upload Result', result);
+    console.log('Mimetype:'. file.mimetype);
 
-    const signedUrl = getSignedUrl(result.Key); // Generate signed URL
+    const signedUrl =  await getSignedUrl(result.Key); // Generate signed URL
 
     const newUpload = new Upload({
       filename: file.filename,
       originalName: file.originalname,
       fileUrl: signedUrl, // Save the signed URL
+      mimetype: file.mimetype, // Save the mimetype
       claimId: req.body.claimId, // Ensure claimId is passed and saved
     });
     await newUpload.save();
@@ -34,11 +36,69 @@ exports.uploadSingleFile = async (req, res) => {
   }
 };
 
+
+
+
+// exports.uploadGeneralFile = async (req, res) => {
+//   const file = req.file;
+
+//   if (!file) {
+//     return res.status(400).json({ error: 'File is missing' });
+//   }
+
+//   try {
+//     const result = await uploadFile(file); // Upload to S3
+//     console.log('S3 Upload Result', result);
+
+//     res.status(200).json({ fileKey: result.Key }); // Return the file key
+//   } catch (error) {
+//     console.error('Error uploading file to S3:', error);
+//     res.status(500).json({ error: 'Failed to upload file' });
+//   }
+// };
+
 exports.handleGetImage = (req, res) => {
   const key = req.params.key;
   const readStream = getFileStream(key);
   readStream.pipe(res);
+}; 
+
+exports.handleGetFile = (req, res) => {
+  const key = req.params.key;
+  try {
+    const readStream = getFileStream(key);
+    readStream.pipe(res);
+  } catch (error) {
+    console.error('Error fetching file:', error);
+    res.status(500).json({ error: 'Failed to fetch file' });
+  }
 };
+
+// exports.getSignedUrl = async (req, res) => {
+//   const key = req.params.key;
+//   try { const url = await getSignedUrl(key)
+// res.status(200).json({url});    
+//   } catch (error) {
+//     res.status(500).json({error:'Failed to get signed URL'})
+    
+//   }
+// }
+
+// exports.handleGetFile = (req, res) => {
+//   const key = req.params.key;
+//   try {
+//       const readStream = getFileStream(key);
+
+//       // Set the appropriate headers
+//       res.setHeader('Content-Disposition', `attachment; filename="${key}"`);
+//       res.setHeader('Content-Type', 'application/octet-stream');
+      
+//       readStream.pipe(res);
+//   } catch (error) {
+//       console.error('Error fetching file:', error);
+//       res.status(500).json({ error: 'Failed to fetch file' });
+//   }
+// };
 
 
 

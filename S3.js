@@ -21,11 +21,11 @@ const S3 = new AWS.S3({
  return S3.upload(uploadParams).promise();
 };
 
-const getSignedUrl = (fileUrl) => {
+const getSignedUrl = (fileKey) => {
     const params = {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: fileUrl,
-      Expires: 60 * 100, // URL expires 1.7 hours 
+      Expires: 60 * 60 * 24 * 30, // URL expires 30 days  
     };
   
     return S3.getSignedUrlPromise('getObject', params);
@@ -37,7 +37,7 @@ const getFileStream = (fileKey) => {
         Bucket: process.env.S3_BUCKET_NAME
     }
 
-    return S3.getobject(downloadParams).createReadStream();
+    return S3.getObject(downloadParams).createReadStream();
 };
 
 

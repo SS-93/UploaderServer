@@ -25,6 +25,8 @@ app.use(cors());
 app.use("/new", ClaimFile);
 app.use('/dms', uploadRoutes);
 
+
+
 const AWS = require('aws-sdk');
 const fs = require('fs');
 const path = require('path');
