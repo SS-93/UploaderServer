@@ -76,7 +76,7 @@ router.post('/claims', async (req, res) => {
 });
 
 // Get all claims
-router.get('/claims', async (req, res) => {
+router.get('/list', async (req, res) => {
     try {
         const getAllClaims = await Claim.find();
         getAllClaims.length > 0 ?
@@ -88,7 +88,7 @@ router.get('/claims', async (req, res) => {
 });
 
 // Get claim by ID
-router.get('/claims/:id', async (req, res) => {
+router.get('/find/:id', async (req, res) => {
     try {
         const objectId = new ObjectId(req.params.id);
         const singleClaim = await Claim.findOne({ _id: objectId });
