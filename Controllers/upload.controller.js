@@ -4,7 +4,9 @@ const Upload = require('../Models/upload.model'); // Adjust the path to your act
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 
 // Configure multer to use a specific destination
-const upload = multer({ dest: 'uploads/' });
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage});
+
 
 exports.uploadSingleFile = async (req, res) => {
   const file = req.file;
@@ -63,14 +65,27 @@ exports.handleGetImage = (req, res) => {
   readStream.pipe(res);
 }; 
 
+// exports.handleGetFile = (req, res) => {
+//   const key = req.params.key;
+//   try {
+//     const readStream = getFileStream(key);
+//     readStream.pipe(res);
+//   } catch (error) {
+//     console.error('Error fetching file:', error);
+//     res.status(500).json({ error: 'Failed to fetch file' });
+//   }
+// };
+
 exports.handleGetFile = (req, res) => {
   const key = req.params.key;
   try {
-    const readStream = getFileStream(key);
-    readStream.pipe(res);
+      const readStream = getFileStream(key);
+      res.setHeader('Content-Disposition', `attachment; filename="${key}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      readStream.pipe(res);
   } catch (error) {
-    console.error('Error fetching file:', error);
-    res.status(500).json({ error: 'Failed to fetch file' });
+      console.error('Error fetching file:', error);
+      res.status(500).json({ error: 'Failed to fetch file' });
   }
 };
 
@@ -83,6 +98,10 @@ res.status(200).json({url});
     
   }
 }
+
+
+exports.uploadMiddleware = upload.single('document');
+
 // }
 
 // exports.handleGetFile = (req, res) => {
@@ -106,7 +125,6 @@ res.status(200).json({url});
 
 
 // Export the multer middleware
-exports.uploadMiddleware = upload.single('document');
 
 
 // const { uploadFile, getFileStream } = require('../S3')

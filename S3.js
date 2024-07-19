@@ -11,13 +11,15 @@ const S3 = new AWS.S3({
 
  const uploadFile = (file) => {
 
-    const fileStream = fs.createReadStream(file.path);
+    // const fileStream = fs.createReadStream(file.path);
 
     const uploadParams = {
        Bucket: process.env.S3_BUCKET_NAME,
-       Body: fileStream,
-       Key: path.basename(file.path), 
-      //  ACL: 'public-read'
+       Body: file.buffer,
+      //  Key: path.basename(file.path),
+      Key: Date.now().toString() + '-' + file.originalname,
+       ACL: 'public-read',
+       ContentType: file.mimetype,
  };
  return S3.upload(uploadParams).promise();
 };

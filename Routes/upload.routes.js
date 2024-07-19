@@ -6,10 +6,23 @@ const uploadController = require('../Controllers/upload.controller');
 router.post('/upload', uploadController.uploadMiddleware, uploadController.uploadSingleFile);
 router.get('/images/:key', uploadController.handleGetImage);
 router.get('/documents/:key', uploadController.handleGetFile);
-
-
+router.get('/documents/:key/signed-url', uploadController.getSignedUrl);
 
 module.exports = router;
+
+
+// const express = require('express');
+// const router = express.Router();
+// const uploadController = require('../Controllers/upload.controller');
+
+// // Define the upload route
+// router.post('/upload', uploadController.uploadMiddleware, uploadController.uploadSingleFile);
+// router.get('/images/:key', uploadController.handleGetImage);
+// router.get('/documents/:key', uploadController.handleGetFile);
+
+
+
+// module.exports = router;
 
 
 
