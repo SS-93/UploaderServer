@@ -7,7 +7,11 @@ const DocumentSchema = new mongoose.Schema ({
     uploadDate: {
         type: Date,
         default: Date.now
-    }
+    },
+    textContent:{
+        type: String, 
+        default: '',
+    },
 });
 
 
@@ -24,6 +28,10 @@ const ClaimSchema = new mongoose.Schema({
     adjuster: { type: String,
     required: false},
     documents: [DocumentSchema],
+    aggregatedText: {
+        type: String,
+        default: '',
+    },
 
 
 });
