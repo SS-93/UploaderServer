@@ -4,14 +4,12 @@ const multer = require('multer');
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 const Claim = require('../Models/claims.model');
 const Upload = require('../Models/upload.model');
-const { performOCR} = require('../TesseractServices.js')
-const OCRProcessor = require('../ocrProcessor.js')
+
 const router = express.Router();
 
 // Configure multer to use memory storage
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
-const ocrProcessor = new OCRProcessor()
 
 const errorResponse = (res, err) => {
     res.status(500).json({ Error: err.message });
@@ -47,19 +45,6 @@ router.post('/claims/:claimId/documents', upload.single('document'), async (req,
             claimId: claimId,
         });
         await newUpload.save();
-
-// Perform OCR processing
-let text;
-if (file.mimetype === 'application/pdf') {
-    text = await ocrProcessor.handlePDF(file.path);
-} else {
-    text = await ocrProcessor.extractText(file.path);
-}
-
-await Claim.updateOne(
-    { 'documents._id': newDocument._id },
-    { $set: { 'documents.$.textContent': text }, $inc: { aggregatedText: ` ${text}` } }
-);
 
         res.json(newDocument);
     } catch (err) {
@@ -156,54 +141,6 @@ router.get('/documents/:key/signed-url', async (req, res) => {
         res.status500.json({ error: 'Failed to get signed URL' });
     }
 });
-
-// Initiate OCR processing for a document
-router.post('/ocr/read/:documentId', async(req, res)=> {
-    try {
-        
-        const {documentId} = req.params;
-        const document = await Claim.findOne({'documents._id': documentId}, {"documents.$":1});
-        if(!document) {
-            return res.status(404).json({ message: 'Document not found'})
-        }
-        const doc = document.docucments[0];
-        const text = await performOCR(doc.fileUrl);
-
-        await Claim.updateOne(
-            {'documents._id': documentId},
-            {$set: {'documents.$.textContent': text}, $inc: { aggregatedText: ' ${text}'}}
-        );
-
-        res.status(200).json({text});
-    } catch (error) {
-
-        console.error('Error performing OCR', error);
-        res.status(500).json({error: "Failed to perform OCR"})
-        
-    }
-
-
-    router.get('documents/:documentId/text', async (req, res)=> {
-        try {
-            const {documentId} = req.params;
-            const document = await Claim.findOne({ 'documents._id': documentId}, {'documents.$': 1 })
-
-            if (!document) {
-                return res.status(404).json ({message: "Document not found"})
-            }
-
-            const doc = document.documents[0];
-            res.status(200).json({text: doc.textContent});
-
-            
-        } catch (error) {
-
-            console.error('Error fetching text', error);
-            res.status(500).json({error: 'Failed to fetch text'})
-            
-        }
-    })
-})
 
 module.exports = router;
 

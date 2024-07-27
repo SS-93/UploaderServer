@@ -7,6 +7,7 @@ const cors = require("cors");
 
 const ClaimFile = require("./Controllers/claims.controller");
 const uploadRoutes = require("./Routes/upload.routes");
+// const OcrProcessor = require('./ocrProcessor')
 
 const { uploadFile, getFileStream, getSignedUrl } = require('./S3');
 
@@ -31,7 +32,7 @@ app.use('/dms', uploadRoutes);
 
 app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
 
-module.exports = { uploadFile, getFileStream, getSignedUrl };
+module.exports = {uploadFile, getFileStream, getSignedUrl};
 
 
 
