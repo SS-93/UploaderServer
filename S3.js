@@ -17,7 +17,8 @@ const S3 = new AWS.S3({
        Bucket: process.env.S3_BUCKET_NAME,
        Body: file.buffer,
       //  Key: path.basename(file.path),
-      Key: Date.now().toString() + '-' + file.originalname,
+      // Key: Date.now().toString() + '-' + file.originalname,
+      Key: file.originalname,
        ACL: 'public-read',
        ContentType: file.mimetype,
        ContentDisposition: 'attachment',
@@ -29,7 +30,8 @@ const getSignedUrl = (fileUrl) => {
     const params = {
       Bucket: process.env.S3_BUCKET_NAME,
       Key: fileUrl,
-      Expires: 60 * 60 * 24 * 30, // URL expires 30 days  
+      Expires: 60 * 60 * 24 * 7, // URL expires 30 days  
+      // Expires: 60 * 60 * 24 * 30, // URL expires 30 days  
     };
   
     return S3.getSignedUrlPromise('getObject', params);

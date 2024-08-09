@@ -2,8 +2,12 @@ const express = require('express');
 const router = express.Router();
 const uploadController = require('../Controllers/upload.controller');
 
+// const multer = require('multer');
+// const upload = multer({ storage: multer.memoryStorage() });
 
 // Define the upload route
+// router.post('/bulk-upload', upload.array('documents', 10), uploadController.uploadMultipleFiles);
+router.post('/bulk-upload', uploadController.uploadMiddleware, uploadController.uploadMultipleFiles);
 router.post('/upload', uploadController.uploadMiddleware, uploadController.uploadSingleFile);
 router.get('/images/:key', uploadController.handleGetImage);
 router.get('/documents/:key', uploadController.handleGetFile);
