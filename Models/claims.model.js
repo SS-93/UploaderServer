@@ -12,6 +12,10 @@ const DocumentSchema = new mongoose.Schema ({
         type: String, 
         default: '',
     },
+    category: {
+        type: String, 
+        required: false
+    },
 });
 
 
@@ -32,6 +36,7 @@ const ClaimSchema = new mongoose.Schema({
         type: String,
         default: '',
     },
+    
 
 
 });

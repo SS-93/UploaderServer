@@ -20,6 +20,7 @@ const S3 = new AWS.S3({
       Key: Date.now().toString() + '-' + file.originalname,
        ACL: 'public-read',
        ContentType: file.mimetype,
+       ContentDisposition: 'attachment',
  };
  return S3.upload(uploadParams).promise();
 };

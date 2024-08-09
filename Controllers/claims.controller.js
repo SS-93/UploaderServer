@@ -19,7 +19,7 @@ const errorResponse = (res, err) => {
 router.post('/claims/:claimId/documents', upload.single('document'), async (req, res) => {
     const file = req.file;
     const { claimId } = req.params;
-    const { fileName } = req.body;
+    const { fileName, category } = req.body;
 
     if (!file) {
         return res.status(400).json({ error: 'File is Missing' });
@@ -32,6 +32,7 @@ router.post('/claims/:claimId/documents', upload.single('document'), async (req,
         const newDocument = {
             fileName: fileName || file.originalname,
             fileUrl: result.Location,
+            category: category || 'Uncategorized'
         };
 
         claim.documents.push(newDocument);
