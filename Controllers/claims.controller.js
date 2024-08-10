@@ -132,6 +132,70 @@ router.get('/documents/:key', (req, res) => {
     }
 });
 
+// Update document details (name, category)
+router.put('/claims/:claimId/documents/:documentId', async (req, res) => {
+    const { claimId, documentId } = req.params;
+    const { fileName, category } = req.body;
+
+    try {
+        // Find the claim by ID
+        const claim = await Claim.findById(claimId);
+        if (!claim) {
+            return res.status(404).json({ message: 'Claim not found' });
+        }
+
+        // Find the document within the claim's documents array
+        const document = claim.documents.id(documentId);
+        if (!document) {
+            return res.status(404).json({ message: 'Document not found' });
+        }
+
+        // Update the document fields
+        if (fileName) document.fileName = fileName;
+        if (category) document.category = category;
+
+        // Save the updated claim
+        await claim.save();
+
+        res.status(200).json({ message: 'Document updated successfully', document });
+    } catch (err) {
+        console.error('Error updating document:', err);
+        res.status(500).json({ error: 'Failed to update document' });
+    }
+});
+
+// Update multiple document details (name, category)
+router.put('/claims/:claimId/documents', async (req, res) => {
+    const { claimId } = req.params;
+    const updates = req.body; // Assuming this is an array of document updates
+
+    try {
+        const claim = await Claim.findById(claimId);
+        if (!claim) {
+            return res.status(404).json({ message: 'Claim not found' });
+        }
+
+        // Iterate over each update and apply it to the correct document
+        updates.forEach(update => {
+            const document = claim.documents.id(update._id);
+            if (document) {
+                if (update.fileName) document.fileName = update.fileName;
+                if (update.category) document.category = update.category;
+                // Apply other updates as needed
+            }
+        });
+
+        // Save the updated claim with the modified documents
+        await claim.save();
+
+        res.status(200).json({ message: 'Documents updated successfully' });
+    } catch (err) {
+        console.error('Error updating documents:', err);
+        res.status(500).json({ error: 'Failed to update documents' });
+    }
+});
+
+
 // Get signed URL for a file
 router.get('/documents/:key/signed-url', async (req, res) => {
     const key = req.params.key;
