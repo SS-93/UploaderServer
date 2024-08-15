@@ -1,12 +1,13 @@
 // Controllers/upload.controller.js
 const multer = require('multer');
-const Upload = require('../Models/upload.model'); // Adjust the path to your actual model file
+const {Upload, ParkedUpload} = require('../Models/upload.model'); // Adjust the path to your actual model file
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
+const Claim = require('../Models/claims.model');
+
 
 // Configure multer to use a specific destination
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage});
-
 
 
 
@@ -18,84 +19,8 @@ exports.uploadSingleFile = async (req, res) => {
   }
 
   try {
-    const result = await uploadFile(file); // Upload to S3
-    console.log('S3 Upload Result', result);
-    console.log('Mimetype:'. file.mimetype);
-
-    const signedUrl =  await getSignedUrl(result.Key); // Generate signed URL
-
-    const newUpload = new Upload({
-      filename: file.filename,
-      originalName: file.originalname,
-      fileUrl: signedUrl, // Save the signed URL
-      mimetype: file.mimetype, // Save the mimetype
-      claimId: req.body.claimId, // Ensure claimId is passed and saved
-    });
-    await newUpload.save();
-
-    res.status(200).json({ message: 'File uploaded successfully', file: newUpload });
-  } catch (error) {
-    console.error('Error saving file to database:', error);
-    res.status(500).json({ error: 'Failed to save file information' });
-  }
-};
-
-// bulk uploader 
-
-// exports.uploadMultipleFiles = async (req, res) => {
-//   const files = req.files;  // Multer will attach an array of files to req.files
-//   const { claimId, category } = req.body;
-
-//   if (!files || files.length === 0) {
-//       return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   try {
-//       const claim = await claim.findById(claimId);
-
-//       if (!claim) {
-//           return res.status(404).json({ error: 'Claim not found' });
-//       }
-
-//       const uploadedFiles = [];
-
-//       for (const file of files) {
-//           // Upload the file to S3
-//           const result = await uploadFile(file);
-//           const signedUrl = await getSignedUrl(result.Key);
-
-//           // Create a new document entry
-//           const newDocument = {
-//               fileName: result.Key,
-//               fileUrl: signedUrl,
-//               category: category || 'Uncategorized',
-//               uploadDate: new Date(),
-//           };
-
-//           // Add the document to the claim's documents array
-//           claim.documents.push(newDocument);
-//           uploadedFiles.push(newDocument);
-//       }
-
-//       // Save the updated claim with the new documents
-//       await claim.save();
-
-//       res.status(200).json({ message: 'Files uploaded successfully', documents: uploadedFiles });
-//   } catch (error) {
-//       console.error('Error saving files to database:', error);
-//       res.status(500).json({ error: 'Failed to save files information' });
-//   }
-// };
-
-exports.uploadMultipleFiles = async (req, res) => {
-  const files = req.files;  // Multer will attach an array of files to req.files
-
-  if (!files || files.length === 0) {
-    return res.status(400).json({ error: 'No files were uploaded' });
-  }
-
-  try {
     const uploadedFiles = [];
+    const files = [file]; // Wrap the single file in an array
 
     for (const file of files) {
       const result = await uploadFile(file); // Upload to S3
@@ -113,32 +38,134 @@ exports.uploadMultipleFiles = async (req, res) => {
       uploadedFiles.push(newUpload);
     }
 
-    res.status(200).json({ message: 'Files uploaded successfully', files: uploadedFiles });
+    res.status(200).json({ message: 'File uploaded successfully', files: uploadedFiles });
   } catch (error) {
-    console.error('Error saving files to database:', error);
+    console.error('Error saving file to database:', error);
+    res.status(500).json({ error: 'Failed to save file information' });
+  }
+};
+
+exports.uploadFiles = async (req, res) => {
+  // Handle both single and multiple file uploads
+  const files = req.files || (req.file ? [req.file] : []);
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: 'No files were uploaded' });
+  }
+
+  const { claimId, category } = req.body; // Extract claimId and category from the request body
+
+  try {
+    // Fetch the corresponding claim from the database using claimId
+    const claim = await Claim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+
+    const uploadedFiles = [];
+
+    for (const file of files) {
+      // Upload to S3
+      const result = await uploadFile(file);
+      // Generate signed URL
+      const signedUrl = await getSignedUrl(result.Key);
+
+      // Create a new document object and associate it with the claim
+      const newDocument = {
+        fileName: file.originalname,
+        fileUrl: signedUrl,
+        category: category || 'Uncategorized',
+      };
+      claim.documents.push(newDocument);
+
+      // Save the document metadata in the Upload collection
+      const newUpload = new Upload({
+        filename: result.Key,
+        originalName: file.originalname,
+        fileUrl: signedUrl,
+        mimetype: file.mimetype,
+        claimId: claimId, // Ensure claimId is passed and saved
+      });
+
+      await newUpload.save(); // Save to database
+      uploadedFiles.push(newDocument);
+    }
+
+    // Save the claim back to the database with the new documents
+    await claim.save();
+
+    res.status(200).json({
+      message: `${uploadedFiles.length} file(s) uploaded successfully and associated with the claim`,
+      files: uploadedFiles,
+    });
+  } catch (error) {
+    console.error('Error saving file(s) to database:', error);
     res.status(500).json({ error: 'Failed to save file information' });
   }
 };
 
 
+exports.bulkUploadFilesWithoutClaim = async (req, res) => {
+  const files = req.files;
 
-// exports.uploadGeneralFile = async (req, res) => {
-//   const file = req.file;
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: 'No files were uploaded' });
+  }
 
-//   if (!file) {
-//     return res.status(400).json({ error: 'File is missing' });
-//   }
+  try {
+    const uploadedFiles = [];
 
-//   try {
-//     const result = await uploadFile(file); // Upload to S3
-//     console.log('S3 Upload Result', result);
+    for (const file of files) {
+      // Upload to S3
+      const result = await uploadFile(file);
+      // Generate signed URL
+      const signedUrl = await getSignedUrl(result.Key);
 
-//     res.status(200).json({ fileKey: result.Key }); // Return the file key
-//   } catch (error) {
-//     console.error('Error uploading file to S3:', error);
-//     res.status(500).json({ error: 'Failed to upload file' });
-//   }
-// };
+      // Save document to the ParkingUpload model
+      const newUpload = new ParkedUpload({
+        filename: result.Key,
+        originalName: file.originalname,
+        fileUrl: signedUrl,
+        mimetype: file.mimetype,
+        category: req.body.category || 'Uncategorized',  // Optional category
+      });
+
+      await newUpload.save();
+      uploadedFiles.push(newUpload);
+    }
+
+    res.status(200).json({
+      message: `${uploadedFiles.length} file(s) uploaded successfully.`,
+      files: uploadedFiles,
+    });
+  } catch (error) {
+    console.error('Error during bulk upload:', error);
+    res.status(500).json({ error: 'Failed to upload files' });
+  }
+};
+
+// Upload without a claim to document dashboard
+
+exports.getRecentUploads = async (req, res) => {
+  try {
+    // Fetch recent uploads, limit to the last 20 for example
+    const recentUploads = await Upload.find().sort({ uploadDate: -1 }).limit(20);
+    res.status(200).json({ files: recentUploads });
+  } catch (error) {
+    console.error('Error fetching recent uploads:', error);
+    res.status(500).json({ error: 'Failed to fetch recent uploads' });
+  }
+};
+
+exports.getParkedUploads = async (req, res) => {
+  try {
+    const parkedUploads = await ParkedUpload.find().sort({ uploadDate: -1 });
+    res.status(200).json({ files: parkedUploads });
+  } catch (error) {
+    console.error('Error fetching parked uploads:', error);
+    res.status(500).json({ error: 'Failed to fetch parked uploads' });
+  }
+};
 
 exports.handleGetImage = (req, res) => {
   const key = req.params.key;
@@ -181,8 +208,182 @@ res.status(200).json({url});
 }
 
 
+
+
 // exports.uploadMiddleware = upload.single('document');
 exports.uploadMiddleware = upload.array('documents', 10);
+
+
+// exports.uploadSingleFile = async (req, res) => {
+//   const file = req.file;
+
+//   if (!file) {
+//     return res.status(400).json({ error: 'File is missing' });
+//   }
+
+//   try {
+//     const result = await uploadFile(file); // Upload to S3
+//     console.log('S3 Upload Result', result);
+//     console.log('Mimetype:'. file.mimetype);
+
+//     const signedUrl =  await getSignedUrl(result.Key); // Generate signed URL
+
+//     const newUpload = new Upload({
+//       filename: file.filename,
+//       originalName: file.originalname,
+//       fileUrl: signedUrl, // Save the signed URL
+//       mimetype: file.mimetype, // Save the mimetype
+//       claimId: req.body.claimId, // Ensure claimId is passed and saved
+//     });
+//     await newUpload.save();
+
+//     res.status(200).json({ message: 'File uploaded successfully', file: newUpload });
+//   } catch (error) {
+//     console.error('Error saving file to database:', error);
+//     res.status(500).json({ error: 'Failed to save file information' });
+//   }
+// };
+
+// // bulk uploader 
+
+// // exports.uploadMultipleFiles = async (req, res) => {
+// //   const files = req.files;  // Multer will attach an array of files to req.files
+// //   const { claimId, category } = req.body;
+
+// //   if (!files || files.length === 0) {
+// //       return res.status(400).json({ error: 'No files were uploaded' });
+// //   }
+
+// //   try {
+// //       const claim = await claim.findById(claimId);
+
+// //       if (!claim) {
+// //           return res.status(404).json({ error: 'Claim not found' });
+// //       }
+
+// //       const uploadedFiles = [];
+
+// //       for (const file of files) {
+// //           // Upload the file to S3
+// //           const result = await uploadFile(file);
+// //           const signedUrl = await getSignedUrl(result.Key);
+
+// //           // Create a new document entry
+// //           const newDocument = {
+// //               fileName: result.Key,
+// //               fileUrl: signedUrl,
+// //               category: category || 'Uncategorized',
+// //               uploadDate: new Date(),
+// //           };
+
+// //           // Add the document to the claim's documents array
+// //           claim.documents.push(newDocument);
+// //           uploadedFiles.push(newDocument);
+// //       }
+
+// //       // Save the updated claim with the new documents
+// //       await claim.save();
+
+// //       res.status(200).json({ message: 'Files uploaded successfully', documents: uploadedFiles });
+// //   } catch (error) {
+// //       console.error('Error saving files to database:', error);
+// //       res.status(500).json({ error: 'Failed to save files information' });
+// //   }
+// // };
+
+// exports.uploadMultipleFiles = async (req, res) => {
+//   const files = req.files;  // Multer will attach an array of files to req.files
+
+//   if (!files || files.length === 0) {
+//     return res.status(400).json({ error: 'No files were uploaded' });
+//   }
+
+//   try {
+    
+//     const uploadedFiles = [];
+
+//     for (const file of files) {
+//       const result = await uploadFile(file); // Upload to S3
+//       const signedUrl = await getSignedUrl(result.Key); // Generate signed URL
+
+//       const newUpload = new Upload({
+//         filename: result.Key,
+//         originalName: file.originalname,
+//         fileUrl: signedUrl, // Save the signed URL
+//         mimetype: file.mimetype, // Save the mimetype
+//         claimId: req.body.claimId, // Ensure claimId is passed and saved
+//       });
+
+//       await newUpload.save(); // Save to database
+      
+//       uploadedFiles.push(newUpload);
+//     }
+
+//     res.status(200).json({ message: 'Files uploaded successfully', files: uploadedFiles });
+//   } catch (error) {
+//     console.error('Error saving files to database:', error);
+//     res.status(500).json({ error: 'Failed to save file information' });
+//   }
+// };
+
+
+
+// exports.uploadGeneralFile = async (req, res) => {
+//   const file = req.file;
+
+//   if (!file) {
+//     return res.status(400).json({ error: 'File is missing' });
+//   }
+
+//   try {
+//     const result = await uploadFile(file); // Upload to S3
+//     console.log('S3 Upload Result', result);
+
+//     res.status(200).json({ fileKey: result.Key }); // Return the file key
+//   } catch (error) {
+//     console.error('Error uploading file to S3:', error);
+//     res.status(500).json({ error: 'Failed to upload file' });
+//   }
+// };
+//! V1
+// exports.uploadFiles = async (req, res) => {
+//   // Handle both single and multiple file uploads
+//   const files = req.files || (req.file ? [req.file] : []);
+
+//   if (!files || files.length === 0) {
+//     return res.status(400).json({ error: 'No files were uploaded' });
+//   }
+
+//   try {
+//     const uploadedFiles = [];
+
+//     for (const file of files) {
+//       const result = await uploadFile(file); // Upload to S3
+//       const signedUrl = await getSignedUrl(result.Key); // Generate signed URL
+
+//       const newUpload = new Upload({
+//         filename: result.Key,
+//         originalName: file.originalname,
+//         fileUrl: signedUrl, // Save the signed URL
+//         mimetype: file.mimetype, // Save the mimetype
+//         claimId: req.body.claimId, // Ensure claimId is passed and saved
+//       });
+
+//       await newUpload.save(); // Save to database
+//       uploadedFiles.push(newUpload);
+//     }
+
+//     res.status(200).json({
+//       message: `${uploadedFiles.length} file(s) uploaded successfully`,
+//       files: uploadedFiles,
+//     });
+//   } catch (error) {
+//     console.error('Error saving file(s) to database:', error);
+//     res.status(500).json({ error: 'Failed to save file information' });
+//   }
+// };
+
+
 
 // }
 

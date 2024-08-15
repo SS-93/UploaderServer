@@ -8,7 +8,7 @@ const upload = multer ({ dest:'uploads/'});
 router.post ('/claims, createClaim')
 router.get('/claims', getAllClaims);
 router.get('/claims/:id', getClaimById);
-router.post('/claims/:claimId/documents', upload.single('document'), uploadDocument);
+// router.post('/claims/:claimId/documents', upload.single('document'), uploadDocument);
 router.get('/documents/:key', getDocument);
 router.post('/claims/:claimId/documents', claimController.upload.single('document'), claimController.uploadSingleFile);
 router.post('/ocr/read/:documentId', claimController.performOCR);

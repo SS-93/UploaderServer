@@ -16,6 +16,7 @@ const errorResponse = (res, err) => {
 };
 
 // Upload a single file to S3 and link it to a claim
+//! V1
 router.post('/claims/:claimId/documents', upload.single('document'), async (req, res) => {
     const file = req.file;
     const { claimId } = req.params;
@@ -163,6 +164,8 @@ router.put('/claims/:claimId/documents/:documentId', async (req, res) => {
         res.status(500).json({ error: 'Failed to update document' });
     }
 });
+
+//!V1
 
 // Update multiple document details (name, category)
 router.put('/claims/:claimId/documents', async (req, res) => {
