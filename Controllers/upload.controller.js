@@ -1,9 +1,8 @@
 // Controllers/upload.controller.js
 const multer = require('multer');
-const {Upload, ParkedUpload} = require('../Models/upload.model'); // Adjust the path to your actual model file
+const { ParkedUpload, Upload} = require('../Models/upload.model'); // Adjust the path to your actual model file
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 const Claim = require('../Models/claims.model');
-
 
 // Configure multer to use a specific destination
 const storage = multer.memoryStorage();
@@ -105,6 +104,120 @@ exports.uploadFiles = async (req, res) => {
 };
 
 
+// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
+//   const files = req.files;
+
+//   if (!files || files.length === 0) {
+//     return res.status(400).json({ error: 'No files were uploaded' });
+//   }
+
+//   try {
+//     const uploadedFiles = [];
+
+//     for (const file of files) {
+//       // Upload to S3
+//       const result = await uploadFile(file);
+//       // Generate signed URL
+//       const signedUrl = await getSignedUrl(result.Key);
+
+//       // Save document to the Upload model without claim association
+//       const newUpload = new Upload({
+//         filename: result.Key,
+//         originalName: file.originalname,
+//         fileUrl: signedUrl,
+//         mimetype: file.mimetype,
+//       });
+
+//       await newUpload.save();
+//       uploadedFiles.push(newUpload);
+//     }
+
+//     res.status(200).json({
+//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
+//       files: uploadedFiles,
+//     });
+//   } catch (error) {
+//     console.error('Error during bulk upload:', error);
+//     res.status(500).json({ error: 'Failed to upload files' });
+//   }
+// };
+
+// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
+//   const files = req.files;
+
+//   if (!files || files.length === 0) {
+//     return res.status(400).json({ error: 'No files were uploaded' });
+//   }
+
+//   try {
+//     const uploadedFiles = [];
+//     const {  category } = req.body; // Extract parkId from the request body
+
+//     for (const file of files) {
+//       const result = await uploadFile(file);
+//       const signedUrl = await getSignedUrl(result.Key);
+
+//       const newUpload = new ParkedUpload({
+//         filename: result.Key,
+//         originalName: file.originalname,
+//         fileUrl: signedUrl,
+//         mimetype: file.mimetype,
+//         // parkId, // Associate the file with a ParkId
+//         category: category || 'Uncategorized',  // Optional category
+//       });
+
+//       await newUpload.save();
+//       uploadedFiles.push(newUpload);
+//     }
+
+//     res.status(200).json({
+//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
+//       files: uploadedFiles,
+//     });
+//   } catch (error) {
+//     console.error('Error during bulk upload:', error);
+//     res.status(500).json({ error: 'Failed to upload files' });
+//   }
+// };
+
+// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
+//   const files = req.files;
+
+//   if (!files || files.length === 0) {
+//     return res.status(400).json({ error: 'No files were uploaded' });
+//   }
+
+//   try {
+//     const uploadedFiles = [];
+//     const { parkId, category } = req.body; // Extract parkId and category from the request body
+
+//     for (const file of files) {
+//       const result = await uploadFile(file);
+//       const signedUrl = await getSignedUrl(result.Key);
+
+//       const newUpload = new ParkedUpload({
+//         filename: result.Key,
+//         originalName: file.originalname,
+//         fileUrl: signedUrl,
+//         mimetype: file.mimetype,
+//         parkId, // Associate the file with a ParkId
+//         category: category || 'Uncategorized',  // Optional category
+//       });
+
+//       await newUpload.save();
+//       uploadedFiles.push(newUpload);
+//     }
+
+//     res.status(200).json({
+//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
+//       files: uploadedFiles,
+//     });
+//   } catch (error) {
+//     console.error('Error during bulk upload:', error);
+//     res.status(500).json({ error: 'Failed to upload files' });
+//   }
+// };
+
 exports.bulkUploadFilesWithoutClaim = async (req, res) => {
   const files = req.files;
 
@@ -114,20 +227,19 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
 
   try {
     const uploadedFiles = [];
+    const { parkId, category } = req.body; // Extract parkId and category from the request body
 
     for (const file of files) {
-      // Upload to S3
       const result = await uploadFile(file);
-      // Generate signed URL
       const signedUrl = await getSignedUrl(result.Key);
 
-      // Save document to the ParkingUpload model
       const newUpload = new ParkedUpload({
         filename: result.Key,
         originalName: file.originalname,
         fileUrl: signedUrl,
         mimetype: file.mimetype,
-        category: req.body.category || 'Uncategorized',  // Optional category
+        parkId, // Associate the file with a ParkId
+        category: Array.isArray(category) ? category[0] : category || 'Uncategorized',  // Ensure it's a string
       });
 
       await newUpload.save();
@@ -144,28 +256,44 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
   }
 };
 
-// Upload without a claim to document dashboard
 
-exports.getRecentUploads = async (req, res) => {
-  try {
-    // Fetch recent uploads, limit to the last 20 for example
-    const recentUploads = await Upload.find().sort({ uploadDate: -1 }).limit(20);
-    res.status(200).json({ files: recentUploads });
-  } catch (error) {
-    console.error('Error fetching recent uploads:', error);
-    res.status(500).json({ error: 'Failed to fetch recent uploads' });
-  }
-};
+
+
 
 exports.getParkedUploads = async (req, res) => {
   try {
-    const parkedUploads = await ParkedUpload.find().sort({ uploadDate: -1 });
+    const { parkId } = req.params;
+    const parkedUploads = await ParkedUpload.find({ parkId }).sort({ uploadDate: -1 });
     res.status(200).json({ files: parkedUploads });
   } catch (error) {
     console.error('Error fetching parked uploads:', error);
     res.status(500).json({ error: 'Failed to fetch parked uploads' });
   }
 };
+
+exports.updateParkedDocuments = async (req, res) => {
+  const { parkId } = req.params;
+  const updates = req.body; // Array of document updates
+
+  try {
+    const parkedDocuments = await ParkedUpload.find({ parkId });
+
+    updates.forEach(async (update) => {
+      const document = parkedDocuments.find(doc => doc._id.toString() === update._id);
+      if (document) {
+        document.fileName = update.fileName || document.fileName;
+        document.category = update.category || document.category;
+        await document.save();
+      }
+    });
+
+    res.status(200).json({ message: 'Documents updated successfully' });
+  } catch (err) {
+    console.error('Error updating parked documents:', err);
+    res.status(500).json({ error: 'Failed to update documents' });
+  }
+};
+
 
 exports.handleGetImage = (req, res) => {
   const key = req.params.key;

@@ -9,6 +9,8 @@ const ParkingSchema = new mongoose.Schema({
   uploadDate: { type: Date, default: Date.now },
   textContent: { type: String, default: '' },
   category: { type: String, required: false },
+
+  // parkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Park', required: true },
 });
 
 // Schema for regular uploads (associated with a claim)
