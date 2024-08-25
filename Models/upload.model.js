@@ -3,14 +3,14 @@ const mongoose = require('mongoose');
 // Schema for parked documents (not yet associated with a claim)
 const ParkingSchema = new mongoose.Schema({
   filename: { type: String, required: true },
-  originalName: { type: String, required: true },
+
   fileUrl: { type: String, required: true },
   mimetype: { type: String, required: true },
   uploadDate: { type: Date, default: Date.now },
   textContent: { type: String, default: '' },
   category: { type: String, required: false },
 
-  // parkId: { type: mongoose.Schema.Types.ObjectId, ref: 'Park', required: true },
+  documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Park', required: false },
 });
 
 // Schema for regular uploads (associated with a claim)
