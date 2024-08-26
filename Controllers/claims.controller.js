@@ -198,6 +198,29 @@ router.put('/claims/:claimId/documents', async (req, res) => {
     }
 });
 
+// Delete a document by its ID
+router.delete('/claims/:claimId/documents/:documentId', async (req, res) => {
+    const { claimId, documentId } = req.params;
+
+    try {
+        // Use MongoDB's $pull operator to remove the document by its ID
+        const result = await Claim.updateOne(
+            { _id: claimId },
+            { $pull: { documents: { _id: documentId } } }
+        );
+
+        if (result.nModified === 0) {
+            return res.status(404).json({ message: 'Document or Claim not found' });
+        }
+
+        res.status(200).json({ message: 'Document deleted successfully' });
+    } catch (err) {
+        console.error('Error deleting document:', err);
+        res.status(500).json({ error: 'Failed to delete document' });
+    }
+});
+
+
 
 // Get signed URL for a file
 router.get('/documents/:key/signed-url', async (req, res) => {
