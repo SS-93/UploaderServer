@@ -3,8 +3,12 @@
 const multer = require('multer');
 const { ParkedUpload, Upload} = require('../Models/upload.model'); // Adjust the path to your actual model file
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
-const Claim = require('../Models/claims.model');
+
 const mongoose = require('mongoose')
+
+
+const Claim = require('../Models/claims.model');
+
 
 // Configure multer to use a specific destination
 const storage = multer.memoryStorage();
@@ -467,36 +471,157 @@ exports.moveDocumentsToClaim = async (req, res) => {
 };
 
 // Helper function to process a batch of documents
+// async function processBatch(claimId, docsToMove) {
+//   try {
+//     const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+//     const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+
+//     console.log("Bulk Update Collection:", Claim.collection.collectionName);  // Log collection name
+//     console.log("Bulk Remove Collection:", ParkedUpload.collection.collectionName);  // Log collection name
+
+
+//     docsToMove.forEach((doc) => {
+//       console.log(`Processing document with ID: ${doc._id} to be added to Claim ID: ${claimId}`);  // Log each document being processed
+
+//       // Add the document to the claim's documents array
+//       bulkUpdateClaim.find({ _id: claimId }).updateOne({
+//         $push: {
+//           documents: {
+//             _id: new mongoose.Types.ObjectId(),
+//             fileName: doc.filename,
+//             fileUrl: doc.fileUrl,
+//             uploadDate: doc.uploadDate,
+//             textContent: doc.textContent,
+//             category: doc.category,
+//           },
+//         },
+//       });
+//       console.log(`Adding document ${doc._id} to Claim ${claimId}`);
+
+//       // Remove the document from ParkedUpload - Use deleteOne instead of removeOne
+//       // bulkRemoveParked.find({ _id: doc._id }).deleteOne();
+//     });
+
+//     // Execute both bulk operations
+//     await bulkUpdateClaim.execute();
+//     await bulkRemoveParked.execute();
+//     console.log("Bulk operations executed successfully.");
+//   } catch (error) {
+//     console.error('Error processing batch:', error);
+//     throw new Error('Batch processing failed');
+//   }
+// }
+
+// async function processBatch(claimId, docsToMove) {
+//   try {
+//     const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+//     const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+
+//     console.log("Bulk Update Collection:", Claim.collection.collectionName);
+//     console.log("Bulk Remove Collection:", ParkedUpload.collection.collectionName);
+
+//     docsToMove.forEach((doc) => {
+//       console.log(`Processing document with ID: ${doc._id} to be added to Claim ID: ${claimId}`);
+      
+//       // Log document fields
+//       console.log('Document details:', {
+//         fileName: doc.filename,
+//         fileUrl: doc.fileUrl,
+//         uploadDate: doc.uploadDate,
+//         textContent: doc.textContent,
+//         category: doc.category,
+//       });
+
+//       // Correct usage of new ObjectId
+//       const updateCondition = { _id: new mongoose.Types.ObjectId(claimId) };  // Corrected line
+//       console.log('Update condition for claim:', updateCondition);
+      
+//       bulkUpdateClaim.find(updateCondition).updateOne({
+//         $push: {
+//           documents: {
+//             _id: new mongoose.Types.ObjectId(),  // Corrected line for creating a new ObjectId
+//             fileName: doc.filename,
+//             fileUrl: doc.fileUrl,
+//             uploadDate: doc.uploadDate,
+//             textContent: doc.textContent,
+//             category: doc.category,
+//           },
+//         },
+//       });
+
+//       console.log(`Adding document ${doc._id} to Claim ${claimId}`);
+
+//       // Correct usage of new ObjectId for removal
+//       const removeCondition = { _id: new mongoose.Types.ObjectId(doc._id) };  // Corrected line
+//       console.log('Remove condition for parked upload:', removeCondition);
+      
+//       bulkRemoveParked.find(removeCondition).deleteOne();
+//     });
+
+//     // Check if there are any operations to execute
+//     if (bulkUpdateClaim.s.batches.length > 0) {
+//       console.log("Executing bulk update claim operation...");
+//       await bulkUpdateClaim.execute();
+//     } else {
+//       console.log("No operations to execute in bulkUpdateClaim.");
+//     }
+
+//     if (bulkRemoveParked.s.batches.length > 0) {
+//       console.log("Executing bulk remove parked operation...");
+//       await bulkRemoveParked.execute();
+//     } else {
+//       console.log("No operations to execute in bulkRemoveParked.");
+//     }
+
+//   } catch (error) {
+//     console.error('Error processing batch:', error);
+//     throw new Error('Batch processing failed');
+//   }
+// }
+
+// Helper function to process a batch of documents
 async function processBatch(claimId, docsToMove) {
   try {
-    const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
-    const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+      // Initialize bulk operations for both Claim and ParkedUpload collections
+      const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+      const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
 
-    docsToMove.forEach((doc) => {
-      // Add the document to the claim's documents array
-      bulkUpdateClaim.find({ _id: claimId }).updateOne({
-        $push: {
-          documents: {
-            _id: new mongoose.Types.ObjectId(),
-            fileName: doc.filename,
-            fileUrl: doc.fileUrl,
-            uploadDate: doc.uploadDate,
-            textContent: doc.textContent,
-            category: doc.category,
-          },
-        },
+      docsToMove.forEach((doc) => {
+          console.log(`Adding document ${doc._id} to Claim ${claimId}`);
+
+          // Add the document to the claim's documents array using $push
+          bulkUpdateClaim.find({ _id: new mongoose.Types.ObjectId(claimId) }).updateOne({
+              $push: {
+                  documents: {
+                      _id: new mongoose.Types.ObjectId(),
+                      fileName: doc.filename,
+                      fileUrl: doc.fileUrl,
+                      uploadDate: doc.uploadDate,
+                      textContent: doc.textContent,
+                      category: doc.category,
+                  },
+              },
+          });
+
+          // Remove the document from ParkedUpload
+          bulkRemoveParked.find({ _id: doc._id }).deleteOne();
       });
 
-      // Remove the document from ParkedUpload - Use deleteOne instead of removeOne
-      bulkRemoveParked.find({ _id: doc._id }).deleteOne();
-    });
+      // Execute both bulk operations only if there are operations queued
+      if (bulkUpdateClaim.s.currentBatch && bulkUpdateClaim.s.currentBatch.operations.length > 0) {
+          await bulkUpdateClaim.execute();
+      } else {
+          console.log("No operations to execute in bulkUpdateClaim.");
+      }
 
-    // Execute both bulk operations
-    await bulkUpdateClaim.execute();
-    await bulkRemoveParked.execute();
+      if (bulkRemoveParked.s.currentBatch && bulkRemoveParked.s.currentBatch.operations.length > 0) {
+          await bulkRemoveParked.execute();
+      } else {
+          console.log("No operations to execute in bulkRemoveParked.");
+      }
   } catch (error) {
-    console.error('Error processing batch:', error);
-    throw new Error('Batch processing failed');
+      console.error('Error processing batch:', error);
+      throw new Error('Batch processing failed');
   }
 }
 

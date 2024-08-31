@@ -41,5 +41,7 @@ const ClaimSchema = new mongoose.Schema({
 
 
 });
+const ClaimModel = mongoose.model('ClaimModel', ClaimSchema);
 
-module.exports = mongoose.model ('ClaimModel', ClaimSchema)
+// Export the model
+module.exports = ClaimModel;
