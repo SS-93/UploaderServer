@@ -4,6 +4,7 @@ const multer = require('multer');
 const { ParkedUpload, Upload} = require('../Models/upload.model'); // Adjust the path to your actual model file
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 const Claim = require('../Models/claims.model');
+const mongoose = require('mongoose')
 
 // Configure multer to use a specific destination
 const storage = multer.memoryStorage();
@@ -230,33 +231,6 @@ exports.updateParkingSessionDocuments = async (req, res) => {
 };
 
 
-// Updated function to update document details
-// exports.updateDocumentDetails = async (req, res) => {
-//   const { documentId } = req.params; // Document ID from the request parameters
-//   const updates = req.body; // Object containing the updates for the document
-
-//   try {
-//     // Find the document by its ID
-//     const document = await ParkedUpload.findById(documentId);
-
-//     if (!document) {
-//       return res.status(404).json({ message: 'Document not found' });
-//     }
-
-//     // Update document fields based on the provided updates
-//     if (updates.fileName) document.filename = updates.fileName;
-//     if (updates.category) document.category = updates.category;
-//     // Add more fields here if needed
-
-//     // Save the updated document
-//     await document.save();
-
-//     res.status(200).json({ message: 'Document updated successfully', document });
-//   } catch (err) {
-//     console.error('Error updating document:', err);
-//     res.status(500).json({ error: 'Failed to update document' });
-//   }
-// };
 
 exports.updateDocumentDetails = async (req, res) => {
   const { documentId } = req.params; // Document ID from the request parameters
@@ -285,6 +259,7 @@ exports.updateDocumentDetails = async (req, res) => {
   }
 };
 
+// Delete a document
 exports.deleteDocument = async (req, res) => {
   const { documentId } = req.params; // Document ID from the request parameters
 
@@ -303,32 +278,227 @@ exports.deleteDocument = async (req, res) => {
   }
 };
 
-// exports.updateDocumentDetails = async (req, res) => {
-//   const { documentId } = req.params; // Document ID from the request parameters
-//   const updates = req.body; // Object containing the updates for the document
+
+
+// Add this function to handle sorting documents from parked uploads to claims
+// exports.sortDocumentToClaim = async (req, res) => {
+//   const { documentId, claimId } = req.params; // Get the document ID and claim ID from the request parameters
 
 //   try {
-//     // Find the document by its ID
-//     const document = await ParkedUpload.findById(documentId);
+//     // Find the parked document by its ID
+//     const parkedDocument = await ParkedUpload.findById(documentId);
 
-//     if (!document) {
-//       return res.status(404).json({ message: 'Document not found' });
+//     if (!parkedDocument) {
+//       return res.status(404).json({ message: 'Document not found in parked uploads' });
 //     }
 
-//     // Update document fields based on the provided updates
-//     if (updates.fileName !== undefined) document.filename = updates.fileName;
-//     if (updates.category !== undefined) document.category = updates.category;
-//     // Add more fields here if needed
+//     // Find the claim by its ID
+//     const claim = await Claim.findById(claimId);
+//     if (!claim) {
+//       return res.status(404).json({ message: 'Claim not found' });
+//     }
 
-//     // Save the updated document
-//     await document.save();
+//     // Create a new document object using the parked document details
+//     const newDocument = {
+//       fileName: parkedDocument.filename,
+//       fileUrl: parkedDocument.fileUrl,
+//       uploadDate: parkedDocument.uploadDate,
+//       textContent: parkedDocument.textContent,
+//       category: parkedDocument.category
+//     };
 
-//     res.status(200).json({ message: 'Document updated successfully', document });
-//   } catch (err) {
-//     console.error('Error updating document:', err);
-//     res.status(500).json({ error: 'Failed to update document' });
+//     // Add the new document to the claim's documents array
+//     claim.documents.push(newDocument);
+
+//     // Save the updated claim
+//     await claim.save();
+
+//     // Remove the document from the parked uploads after it's moved to the claim
+//     await ParkedUpload.findByIdAndDelete(documentId);
+
+//     res.status(200).json({ message: 'Document sorted to claim successfully', document: newDocument });
+//   } catch (error) {
+//     console.error('Error sorting document to claim:', error);
+//     res.status(500).json({ error: 'Failed to sort document to claim' });
 //   }
 // };
+
+// Add this function to handle sorting documents from parked uploads to claims
+exports.sortDocumentToClaim = async (req, res) => {
+  const { documentId, claimId } = req.params; // Get the document ID and claim ID from the request parameters
+
+  try {
+    // Find the parked document by its ID
+    const parkedDocument = await ParkedUpload.findById(documentId);
+
+    if (!parkedDocument) {
+      return res.status(404).json({ message: 'Document not found in parked uploads' });
+    }
+
+    // Find the claim by its ID
+    const claim = await Claim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({ message: 'Claim not found' });
+    }
+
+    // Create a new document object using the parked document details
+    const newDocument = {
+      fileName: parkedDocument.filename,
+      fileUrl: parkedDocument.fileUrl,
+      uploadDate: parkedDocument.uploadDate,
+      textContent: parkedDocument.textContent,
+      category: parkedDocument.category,
+    };
+
+    // Add the new document to the claim's documents array
+    claim.documents.push(newDocument);
+
+    // Save the updated claim
+    await claim.save();
+
+    // Remove the document from the parked uploads after it's moved to the claim
+    await ParkedUpload.findByIdAndDelete(documentId);
+
+    res.status(200).json({ message: 'Document sorted to claim successfully', document: newDocument });
+  } catch (error) {
+    console.error('Error sorting document to claim:', error);
+    res.status(500).json({ error: 'Failed to sort document to claim' });
+  }
+};
+
+
+// Function to move documents to a claim in batches
+// exports.moveDocumentsToClaim = async (req, res) => {
+//   const { claimId } = req.params;
+//   const { filter, batchSize } = req.body;  // Assuming filter and batchSize are sent in the request body
+
+//   try {
+//     const cursor = ParkedUpload.find(filter).cursor();
+//     let docsToMove = [];
+//     let counter = 0;
+
+//     for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
+//       docsToMove.push(doc);
+//       counter++;
+
+//       if (counter >= (batchSize || 100)) {
+//         await processBatch(claimId, docsToMove);
+//         docsToMove = [];
+//         counter = 0;
+//       }
+//     }
+
+//     // Process any remaining documents
+//     if (docsToMove.length > 0) {
+//       await processBatch(claimId, docsToMove);
+//     }
+
+//     res.status(200).json({ message: 'Documents moved successfully!' });
+//   } catch (error) {
+//     console.error('Error moving documents:', error);
+//     res.status(500).json({ error: 'Failed to move documents' });
+//   }
+// };
+
+// // Helper function to process a batch of documents
+// async function processBatch(claimId, docsToMove) {
+//   try {
+//     const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+//     const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+
+//     docsToMove.forEach((doc) => {
+//       // Add the document to the claim's documents array
+//       bulkUpdateClaim.find({ _id: claimId }).updateOne({
+//         $push: {
+//           documents: {
+//             _id: new mongoose.Types.ObjectId(),
+//             fileName: doc.filename,
+//             fileUrl: doc.fileUrl,
+//             uploadDate: doc.uploadDate,
+//             textContent: doc.textContent,
+//             category: doc.category,
+//           },
+//         },
+//       });
+
+//       // Remove the document from ParkedUpload - Use deleteOne instead of removeOne
+//       bulkRemoveParked.find({ _id: doc._id }).deleteOne();
+//     });
+
+//     // Execute both bulk operations
+//     await bulkUpdateClaim.execute();
+//     await bulkRemoveParked.execute();
+//   } catch (error) {
+//     console.error('Error processing batch:', error); // Add a log here
+//     throw new Error('Batch processing failed');  // Throw an error to be caught in the calling function
+//   }
+// }
+
+exports.moveDocumentsToClaim = async (req, res) => {
+  const { claimId } = req.params;
+  const { filter, batchSize } = req.body;  // Assuming filter and batchSize are sent in the request body
+
+  try {
+    const cursor = ParkedUpload.find(filter).cursor();
+    let docsToMove = [];
+    let counter = 0;
+
+    for (let doc = await cursor.next(); doc != null; doc = await cursor.next()) {
+      docsToMove.push(doc);
+      counter++;
+
+      if (counter >= (batchSize || 100)) {
+        await processBatch(claimId, docsToMove);
+        docsToMove = [];
+        counter = 0;
+      }
+    }
+
+    // Process any remaining documents
+    if (docsToMove.length > 0) {
+      await processBatch(claimId, docsToMove);
+    }
+
+    res.status(200).json({ message: 'Documents moved successfully!' });
+  } catch (error) {
+    console.error('Error moving documents:', error);
+    res.status(500).json({ error: 'Failed to move documents' });
+  }
+};
+
+// Helper function to process a batch of documents
+async function processBatch(claimId, docsToMove) {
+  try {
+    const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+    const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+
+    docsToMove.forEach((doc) => {
+      // Add the document to the claim's documents array
+      bulkUpdateClaim.find({ _id: claimId }).updateOne({
+        $push: {
+          documents: {
+            _id: new mongoose.Types.ObjectId(),
+            fileName: doc.filename,
+            fileUrl: doc.fileUrl,
+            uploadDate: doc.uploadDate,
+            textContent: doc.textContent,
+            category: doc.category,
+          },
+        },
+      });
+
+      // Remove the document from ParkedUpload - Use deleteOne instead of removeOne
+      bulkRemoveParked.find({ _id: doc._id }).deleteOne();
+    });
+
+    // Execute both bulk operations
+    await bulkUpdateClaim.execute();
+    await bulkRemoveParked.execute();
+  } catch (error) {
+    console.error('Error processing batch:', error);
+    throw new Error('Batch processing failed');
+  }
+}
 
 
 
@@ -338,16 +508,7 @@ exports.handleGetImage = (req, res) => {
   readStream.pipe(res);
 }; 
 
-// exports.handleGetFile = (req, res) => {
-//   const key = req.params.key;
-//   try {
-//     const readStream = getFileStream(key);
-//     readStream.pipe(res);
-//   } catch (error) {
-//     console.error('Error fetching file:', error);
-//     res.status(500).json({ error: 'Failed to fetch file' });
-//   }
-// };
+
 
 exports.handleGetFile = (req, res) => {
   const key = req.params.key;
@@ -379,1212 +540,3 @@ res.status(200).json({url});
 exports.uploadMiddleware = upload.array('documents', 10);
 
 
-// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-//   const files = req.files;
-
-//   if (!files || files.length === 0) {
-//     return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   try {
-//     const uploadedFiles = [];
-
-//     for (const file of files) {
-//       // Upload to S3
-//       const result = await uploadFile(file);
-//       // Generate signed URL
-//       const signedUrl = await getSignedUrl(result.Key);
-
-//       // Save document to the Upload model without claim association
-//       const newUpload = new Upload({
-//         filename: result.Key,
-//         originalName: file.originalname,
-//         fileUrl: signedUrl,
-//         mimetype: file.mimetype,
-//       });
-
-//       await newUpload.save();
-//       uploadedFiles.push(newUpload);
-//     }
-
-//     res.status(200).json({
-//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-//       files: uploadedFiles,
-//     });
-//   } catch (error) {
-//     console.error('Error during bulk upload:', error);
-//     res.status(500).json({ error: 'Failed to upload files' });
-//   }
-// };
-
-// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-//   const files = req.files;
-
-//   if (!files || files.length === 0) {
-//     return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   try {
-//     const uploadedFiles = [];
-//     const {  category } = req.body; // Extract parkId from the request body
-
-//     for (const file of files) {
-//       const result = await uploadFile(file);
-//       const signedUrl = await getSignedUrl(result.Key);
-
-//       const newUpload = new ParkedUpload({
-//         filename: result.Key,
-//         originalName: file.originalname,
-//         fileUrl: signedUrl,
-//         mimetype: file.mimetype,
-//         // parkId, // Associate the file with a ParkId
-//         category: category || 'Uncategorized',  // Optional category
-//       });
-
-//       await newUpload.save();
-//       uploadedFiles.push(newUpload);
-//     }
-
-//     res.status(200).json({
-//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-//       files: uploadedFiles,
-//     });
-//   } catch (error) {
-//     console.error('Error during bulk upload:', error);
-//     res.status(500).json({ error: 'Failed to upload files' });
-//   }
-// };
-
-// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-//   const files = req.files;
-
-//   if (!files || files.length === 0) {
-//     return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   try {
-//     const uploadedFiles = [];
-//     const { parkId, category } = req.body; // Extract parkId and category from the request body
-
-//     for (const file of files) {
-//       const result = await uploadFile(file);
-//       const signedUrl = await getSignedUrl(result.Key);
-
-//       const newUpload = new ParkedUpload({
-//         filename: result.Key,
-//         originalName: file.originalname,
-//         fileUrl: signedUrl,
-//         mimetype: file.mimetype,
-//         parkId, // Associate the file with a ParkId
-//         category: category || 'Uncategorized',  // Optional category
-//       });
-
-//       await newUpload.save();
-//       uploadedFiles.push(newUpload);
-//     }
-
-//     res.status(200).json({
-//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-//       files: uploadedFiles,
-//     });
-//   } catch (error) {
-//     console.error('Error during bulk upload:', error);
-//     res.status(500).json({ error: 'Failed to upload files' });
-//   }
-// };
-
-
-
-// // Controllers/upload.controller.js
-// const multer = require('multer');
-// const { ParkedUpload, Upload} = require('../Models/upload.model'); // Adjust the path to your actual model file
-// const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
-// const Claim = require('../Models/claims.model');
-
-// // Configure multer to use a specific destination
-// const storage = multer.memoryStorage();
-// const upload = multer({ storage: storage});
-
-
-
-// exports.uploadSingleFile = async (req, res) => {
-//   const file = req.file;
-
-//   if (!file) {
-//     return res.status(400).json({ error: 'File is missing' });
-//   }
-
-//   try {
-//     const uploadedFiles = [];
-//     const files = [file]; // Wrap the single file in an array
-
-//     for (const file of files) {
-//       const result = await uploadFile(file); // Upload to S3
-//       const signedUrl = await getSignedUrl(result.Key); // Generate signed URL
-
-//       const newUpload = new Upload({
-//         filename: result.Key,
-//         originalName: file.originalname,
-//         fileUrl: signedUrl, // Save the signed URL
-//         mimetype: file.mimetype, // Save the mimetype
-//         claimId: req.body.claimId, // Ensure claimId is passed and saved
-//       });
-
-//       await newUpload.save(); // Save to database
-//       uploadedFiles.push(newUpload);
-//     }
-
-//     res.status(200).json({ message: 'File uploaded successfully', files: uploadedFiles });
-//   } catch (error) {
-//     console.error('Error saving file to database:', error);
-//     res.status(500).json({ error: 'Failed to save file information' });
-//   }
-// };
-
-// exports.uploadFiles = async (req, res) => {
-//   // Handle both single and multiple file uploads
-//   const files = req.files || (req.file ? [req.file] : []);
-
-//   if (!files || files.length === 0) {
-//     return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   const { claimId, category } = req.body; // Extract claimId and category from the request body
-
-//   try {
-//     // Fetch the corresponding claim from the database using claimId
-//     const claim = await Claim.findById(claimId);
-//     if (!claim) {
-//       return res.status(404).json({ error: 'Claim not found' });
-//     }
-
-//     const uploadedFiles = [];
-
-//     for (const file of files) {
-//       // Upload to S3
-//       const result = await uploadFile(file);
-//       // Generate signed URL
-//       const signedUrl = await getSignedUrl(result.Key);
-
-//       // Create a new document object and associate it with the claim
-//       const newDocument = {
-//         fileName: file.originalname,
-//         fileUrl: signedUrl,
-//         category: category || 'Uncategorized',
-//       };
-//       claim.documents.push(newDocument);
-
-//       // Save the document metadata in the Upload collection
-//       const newUpload = new Upload({
-//         filename: result.Key,
-//         originalName: file.originalname,
-//         fileUrl: signedUrl,
-//         mimetype: file.mimetype,
-//         claimId: claimId, // Ensure claimId is passed and saved
-//       });
-
-//       await newUpload.save(); // Save to database
-//       uploadedFiles.push(newDocument);
-//     }
-
-//     // Save the claim back to the database with the new documents
-//     await claim.save();
-
-//     res.status(200).json({
-//       message: `${uploadedFiles.length} file(s) uploaded successfully and associated with the claim`,
-//       files: uploadedFiles,
-//     });
-//   } catch (error) {
-//     console.error('Error saving file(s) to database:', error);
-//     res.status(500).json({ error: 'Failed to save file information' });
-//   }
-// };
-
-
-
-
-// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-//   const files = req.files;
-
-//   if (!files || files.length === 0) {
-//     return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   try {
-//     const uploadedFiles = [];
-//     const { parkId, category } = req.body; // Extract parkId and category from the request body
-
-//     for (const file of files) {
-//       const result = await uploadFile(file);
-//       const signedUrl = await getSignedUrl(result.Key);
-
-//       const newUpload = new ParkedUpload({
-//         filename: result.Key,
-//         originalName: file.originalname,
-//         fileUrl: signedUrl,
-//         mimetype: file.mimetype,
-//         parkId, // Associate the file with a ParkId
-//         category: Array.isArray(category) ? category[0] : category || 'Uncategorized',  // Ensure it's a string
-//       });
-
-//       await newUpload.save();
-//       uploadedFiles.push(newUpload);
-//     }
-
-//     res.status(200).json({
-//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-//       files: uploadedFiles,
-//     });
-//   } catch (error) {
-//     console.error('Error during bulk upload:', error);
-//     res.status(500).json({ error: 'Failed to upload files' });
-//   }
-// };
-
-
-
-
-
-// exports.getParkedUploads = async (req, res) => {
-//   try {
-//     const { parkId } = req.params;
-//     const parkedUploads = await ParkedUpload.find({ parkId }).sort({ uploadDate: -1 });
-//     res.status(200).json({ files: parkedUploads });
-//   } catch (error) {
-//     console.error('Error fetching parked uploads:', error);
-//     res.status(500).json({ error: 'Failed to fetch parked uploads' });
-//   }
-// };
-
-// // exports.updateParkedDocuments = async (req, res) => {
-// //   const { parkId } = req.params;
-// //   const updates = req.body; // Array of document updates
-
-// //   try {
-// //     const parkedDocuments = await ParkedUpload.find({ parkId });
-
-// //     updates.forEach(async (update) => {
-// //       const document = parkedDocuments.find(doc => doc._id.toString() === update._id);
-// //       if (document) {
-// //         document.fileName = update.fileName || document.fileName;
-// //         document.category = update.category || document.category;
-// //         await document.save();
-// //       }
-// //     });
-
-// //     res.status(200).json({ message: 'Documents updated successfully' });
-// //   } catch (err) {
-// //     console.error('Error updating parked documents:', err);
-// //     res.status(500).json({ error: 'Failed to update documents' });
-// //   }
-// // };
-
-// // src/controllers/upload.controller.js
-// // Ensure that all updates across both Claim and ParkedUpload documents use their respective _id:
-// exports.updateDocuments = async (req, res) => {
-//   const { claimId } = req.params;
-//   const updates = req.body;
-
-//   try {
-//       const claim = await Claim.findById(claimId);
-//       if (!claim) {
-//           return res.status(404).json({ message: 'Claim not found' });
-//       }
-
-//       updates.forEach(update => {
-//           const document = claim.documents.id(update._id);
-//           if (document) {
-//               if (update.fileName) document.fileName = update.fileName;
-//               if (update.category) document.category = update.category;
-//           }
-//       });
-
-//       await claim.save();
-//       res.status(200).json({ message: 'Documents updated successfully' });
-//   } catch (err) {
-//       console.error('Error updating documents:', err);
-//       res.status(500).json({ error: 'Failed to update documents' });
-//   }
-// };
-
-
-// // src/controllers/upload.controller.js
-// // Update multiple document details (name, category)
-// exports.updateParkedDocuments = async (req, res) => {
-//   const { parkId } = req.params;
-//   const updates = req.body;
-
-//   try {
-//       // Ensure parkId is a valid ObjectId
-//       if (!parkId || !mongoose.Types.ObjectId.isValid(parkId)) {
-//           return res.status(400).json({ error: 'Invalid parkId' });
-//       }
-
-//       // Fetch parked documents by parkId
-//       const parkedDocuments = await ParkedUpload.find({ parkId });
-
-//       // Create an array of promises to update each document
-//       const updatePromises = updates.map(async (update) => {
-//           const document = parkedDocuments.find(doc => doc._id.toString() === update._id);
-//           if (document) {
-//               document.fileName = update.fileName || document.fileName;
-//               document.category = update.category || document.category;
-//               return document.save();
-//           }
-//       });
-
-//       // Wait for all updates to complete
-//       await Promise.all(updatePromises);
-//       res.status(200).json({ message: 'Documents updated successfully' });
-//   } catch (err) {
-//       console.error('Error updating parked documents:', err);
-//       res.status(500).json({ error: 'Failed to update documents' });
-//   }
-// };
-
-// // controllers/upload.controller.js
-// exports.uploadDocumentsToParkingSession = async (req, res) => {
-//   const { parkingSessionId } = req.body; // Extract parkingSessionId from request body
-//   const files = req.files;
-
-//   if (!files || files.length === 0) {
-//       return res.status(400).json({ error: 'No files were uploaded' });
-//   }
-
-//   try {
-//       const parkingSession = await ParkingSession.findById(parkingSessionId);
-//       if (!parkingSession) {
-//           return res.status(404).json({ error: 'Parking session not found' });
-//       }
-
-//       const uploadedFiles = [];
-//       for (const file of files) {
-//           const result = await uploadFile(file); // Upload to S3
-//           const signedUrl = await getSignedUrl(result.Key); // Generate signed URL
-
-//           const newDocument = new Document({
-//               filename: result.Key,
-//               originalName: file.originalname,
-//               fileUrl: signedUrl,
-//               mimetype: file.mimetype,
-//               parkingSessionId: parkingSessionId, // Associate with parking session
-//           });
-
-//           await newDocument.save();
-//           parkingSession.documents.push(newDocument._id); // Add document to parking session
-//           uploadedFiles.push(newDocument);
-//       }
-
-//       await parkingSession.save(); // Save session updates
-//       res.status(200).json({ message: 'Files uploaded successfully', files: uploadedFiles });
-//   } catch (error) {
-//       console.error('Error uploading documents:', error);
-//       res.status(500).json({ error: 'Failed to upload documents' });
-//   }
-// };
-
-
-// // controllers/upload.controller.js
-
-// exports.updateParkingSessionDocuments = async (req, res) => {
-//   const { parkingSessionId } = req.params;
-//   const updates = req.body; // Array of document updates
-
-//   try {
-//       if (!parkingSessionId || !mongoose.Types.ObjectId.isValid(parkingSessionId)) {
-//           return res.status(400).json({ error: 'Invalid parkingSessionId' });
-//       }
-
-//       // Fetch parking session by parkingSessionId
-//       const parkingSession = await ParkingSession.findById(parkingSessionId).populate('documents');
-
-//       if (!parkingSession) {
-//           return res.status(404).json({ message: 'Parking session not found' });
-//       }
-
-//       // Iterate over each update and apply it to the correct document
-//       const updatePromises = updates.map(async (update) => {
-//           const document = parkingSession.documents.find(doc => doc._id.toString() === update._id);
-//           if (document) {
-//               document.fileName = update.fileName || document.fileName;
-//               document.category = update.category || document.category;
-//               // Apply other updates as needed
-//               return document.save();
-//           }
-//       });
-
-//       // Wait for all updates to complete
-//       await Promise.all(updatePromises);
-
-//       // Save the updated parking session
-//       await parkingSession.save();
-
-//       res.status(200).json({ message: 'Documents updated successfully' });
-//   } catch (err) {
-//       console.error('Error updating documents:', err);
-//       res.status(500).json({ error: 'Failed to update documents' });
-//   }
-// };
-
-
-// exports.handleGetImage = (req, res) => {
-//   const key = req.params.key;
-//   const readStream = getFileStream(key);
-//   readStream.pipe(res);
-// }; 
-
-// // exports.handleGetFile = (req, res) => {
-// //   const key = req.params.key;
-// //   try {
-// //     const readStream = getFileStream(key);
-// //     readStream.pipe(res);
-// //   } catch (error) {
-// //     console.error('Error fetching file:', error);
-// //     res.status(500).json({ error: 'Failed to fetch file' });
-// //   }
-// // };
-
-// exports.handleGetFile = (req, res) => {
-//   const key = req.params.key;
-//   try {
-//       const readStream = getFileStream(key);
-//       res.setHeader('Content-Disposition', `attachment; filename="${key}"`);
-//       res.setHeader('Content-Type', 'application/octet-stream');
-//       readStream.pipe(res);
-//   } catch (error) {
-//       console.error('Error fetching file:', error);
-//       res.status(500).json({ error: 'Failed to fetch file' });
-//   }
-// };
-
-// exports.getSignedUrl = async (req, res) => {
-//   const key = req.params.key;
-//   try { const url = await getSignedUrl(key)
-// res.status(200).json({url});    
-//   } catch (error) {
-//     res.status(500).json({error:'Failed to get signed URL'})
-    
-//   }
-// }
-
-
-
-
-// // exports.uploadMiddleware = upload.single('document');
-// exports.uploadMiddleware = upload.array('documents', 10);
-
-
-
-
-// // exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-// //   const files = req.files;
-
-// //   if (!files || files.length === 0) {
-// //     return res.status(400).json({ error: 'No files were uploaded' });
-// //   }
-
-// //   try {
-// //     const uploadedFiles = [];
-
-// //     for (const file of files) {
-// //       // Upload to S3
-// //       const result = await uploadFile(file);
-// //       // Generate signed URL
-// //       const signedUrl = await getSignedUrl(result.Key);
-
-// //       // Save document to the Upload model without claim association
-// //       const newUpload = new Upload({
-// //         filename: result.Key,
-// //         originalName: file.originalname,
-// //         fileUrl: signedUrl,
-// //         mimetype: file.mimetype,
-// //       });
-
-// //       await newUpload.save();
-// //       uploadedFiles.push(newUpload);
-// //     }
-
-// //     res.status(200).json({
-// //       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-// //       files: uploadedFiles,
-// //     });
-// //   } catch (error) {
-// //     console.error('Error during bulk upload:', error);
-// //     res.status(500).json({ error: 'Failed to upload files' });
-// //   }
-// // };
-
-// // exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-// //   const files = req.files;
-
-// //   if (!files || files.length === 0) {
-// //     return res.status(400).json({ error: 'No files were uploaded' });
-// //   }
-
-// //   try {
-// //     const uploadedFiles = [];
-// //     const {  category } = req.body; // Extract parkId from the request body
-
-// //     for (const file of files) {
-// //       const result = await uploadFile(file);
-// //       const signedUrl = await getSignedUrl(result.Key);
-
-// //       const newUpload = new ParkedUpload({
-// //         filename: result.Key,
-// //         originalName: file.originalname,
-// //         fileUrl: signedUrl,
-// //         mimetype: file.mimetype,
-// //         // parkId, // Associate the file with a ParkId
-// //         category: category || 'Uncategorized',  // Optional category
-// //       });
-
-// //       await newUpload.save();
-// //       uploadedFiles.push(newUpload);
-// //     }
-
-// //     res.status(200).json({
-// //       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-// //       files: uploadedFiles,
-// //     });
-// //   } catch (error) {
-// //     console.error('Error during bulk upload:', error);
-// //     res.status(500).json({ error: 'Failed to upload files' });
-// //   }
-// // };
-
-// // exports.bulkUploadFilesWithoutClaim = async (req, res) => {
-// //   const files = req.files;
-
-// //   if (!files || files.length === 0) {
-// //     return res.status(400).json({ error: 'No files were uploaded' });
-// //   }
-
-// //   try {
-// //     const uploadedFiles = [];
-// //     const { parkId, category } = req.body; // Extract parkId and category from the request body
-
-// //     for (const file of files) {
-// //       const result = await uploadFile(file);
-// //       const signedUrl = await getSignedUrl(result.Key);
-
-// //       const newUpload = new ParkedUpload({
-// //         filename: result.Key,
-// //         originalName: file.originalname,
-// //         fileUrl: signedUrl,
-// //         mimetype: file.mimetype,
-// //         parkId, // Associate the file with a ParkId
-// //         category: category || 'Uncategorized',  // Optional category
-// //       });
-
-// //       await newUpload.save();
-// //       uploadedFiles.push(newUpload);
-// //     }
-
-// //     res.status(200).json({
-// //       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
-// //       files: uploadedFiles,
-// //     });
-// //   } catch (error) {
-// //     console.error('Error during bulk upload:', error);
-// //     res.status(500).json({ error: 'Failed to upload files' });
-// //   }
-// // };
-// // exports.uploadSingleFile = async (req, res) => {
-// //   const file = req.file;
-
-// //   if (!file) {
-// //     return res.status(400).json({ error: 'File is missing' });
-// //   }
-
-// //   try {
-// //     const result = await uploadFile(file); // Upload to S3
-// //     console.log('S3 Upload Result', result);
-// //     console.log('Mimetype:'. file.mimetype);
-
-// //     const signedUrl =  await getSignedUrl(result.Key); // Generate signed URL
-
-// //     const newUpload = new Upload({
-// //       filename: file.filename,
-// //       originalName: file.originalname,
-// //       fileUrl: signedUrl, // Save the signed URL
-// //       mimetype: file.mimetype, // Save the mimetype
-// //       claimId: req.body.claimId, // Ensure claimId is passed and saved
-// //     });
-// //     await newUpload.save();
-
-// //     res.status(200).json({ message: 'File uploaded successfully', file: newUpload });
-// //   } catch (error) {
-// //     console.error('Error saving file to database:', error);
-// //     res.status(500).json({ error: 'Failed to save file information' });
-// //   }
-// // };
-
-// // // bulk uploader 
-
-// // // exports.uploadMultipleFiles = async (req, res) => {
-// // //   const files = req.files;  // Multer will attach an array of files to req.files
-// // //   const { claimId, category } = req.body;
-
-// // //   if (!files || files.length === 0) {
-// // //       return res.status(400).json({ error: 'No files were uploaded' });
-// // //   }
-
-// // //   try {
-// // //       const claim = await claim.findById(claimId);
-
-// // //       if (!claim) {
-// // //           return res.status(404).json({ error: 'Claim not found' });
-// // //       }
-
-// // //       const uploadedFiles = [];
-
-// // //       for (const file of files) {
-// // //           // Upload the file to S3
-// // //           const result = await uploadFile(file);
-// // //           const signedUrl = await getSignedUrl(result.Key);
-
-// // //           // Create a new document entry
-// // //           const newDocument = {
-// // //               fileName: result.Key,
-// // //               fileUrl: signedUrl,
-// // //               category: category || 'Uncategorized',
-// // //               uploadDate: new Date(),
-// // //           };
-
-// // //           // Add the document to the claim's documents array
-// // //           claim.documents.push(newDocument);
-// // //           uploadedFiles.push(newDocument);
-// // //       }
-
-// // //       // Save the updated claim with the new documents
-// // //       await claim.save();
-
-// // //       res.status(200).json({ message: 'Files uploaded successfully', documents: uploadedFiles });
-// // //   } catch (error) {
-// // //       console.error('Error saving files to database:', error);
-// // //       res.status(500).json({ error: 'Failed to save files information' });
-// // //   }
-// // // };
-
-// // exports.uploadMultipleFiles = async (req, res) => {
-// //   const files = req.files;  // Multer will attach an array of files to req.files
-
-// //   if (!files || files.length === 0) {
-// //     return res.status(400).json({ error: 'No files were uploaded' });
-// //   }
-
-// //   try {
-    
-// //     const uploadedFiles = [];
-
-// //     for (const file of files) {
-// //       const result = await uploadFile(file); // Upload to S3
-// //       const signedUrl = await getSignedUrl(result.Key); // Generate signed URL
-
-// //       const newUpload = new Upload({
-// //         filename: result.Key,
-// //         originalName: file.originalname,
-// //         fileUrl: signedUrl, // Save the signed URL
-// //         mimetype: file.mimetype, // Save the mimetype
-// //         claimId: req.body.claimId, // Ensure claimId is passed and saved
-// //       });
-
-// //       await newUpload.save(); // Save to database
-      
-// //       uploadedFiles.push(newUpload);
-// //     }
-
-// //     res.status(200).json({ message: 'Files uploaded successfully', files: uploadedFiles });
-// //   } catch (error) {
-// //     console.error('Error saving files to database:', error);
-// //     res.status(500).json({ error: 'Failed to save file information' });
-// //   }
-// // };
-
-
-
-// // exports.uploadGeneralFile = async (req, res) => {
-// //   const file = req.file;
-
-// //   if (!file) {
-// //     return res.status(400).json({ error: 'File is missing' });
-// //   }
-
-// //   try {
-// //     const result = await uploadFile(file); // Upload to S3
-// //     console.log('S3 Upload Result', result);
-
-// //     res.status(200).json({ fileKey: result.Key }); // Return the file key
-// //   } catch (error) {
-// //     console.error('Error uploading file to S3:', error);
-// //     res.status(500).json({ error: 'Failed to upload file' });
-// //   }
-// // };
-// //! V1
-// // exports.uploadFiles = async (req, res) => {
-// //   // Handle both single and multiple file uploads
-// //   const files = req.files || (req.file ? [req.file] : []);
-
-// //   if (!files || files.length === 0) {
-// //     return res.status(400).json({ error: 'No files were uploaded' });
-// //   }
-
-// //   try {
-// //     const uploadedFiles = [];
-
-// //     for (const file of files) {
-// //       const result = await uploadFile(file); // Upload to S3
-// //       const signedUrl = await getSignedUrl(result.Key); // Generate signed URL
-
-// //       const newUpload = new Upload({
-// //         filename: result.Key,
-// //         originalName: file.originalname,
-// //         fileUrl: signedUrl, // Save the signed URL
-// //         mimetype: file.mimetype, // Save the mimetype
-// //         claimId: req.body.claimId, // Ensure claimId is passed and saved
-// //       });
-
-// //       await newUpload.save(); // Save to database
-// //       uploadedFiles.push(newUpload);
-// //     }
-
-// //     res.status(200).json({
-// //       message: `${uploadedFiles.length} file(s) uploaded successfully`,
-// //       files: uploadedFiles,
-// //     });
-// //   } catch (error) {
-// //     console.error('Error saving file(s) to database:', error);
-// //     res.status(500).json({ error: 'Failed to save file information' });
-// //   }
-// // };
-
-
-
-// // }
-
-// // exports.handleGetFile = (req, res) => {
-// //   const key = req.params.key;
-// //   try {
-// //       const readStream = getFileStream(key);
-
-// //       // Set the appropriate headers
-// //       res.setHeader('Content-Disposition', `attachment; filename="${key}"`);
-// //       res.setHeader('Content-Type', 'application/octet-stream');
-      
-// //       readStream.pipe(res);
-// //   } catch (error) {
-// //       console.error('Error fetching file:', error);
-// //       res.status(500).json({ error: 'Failed to fetch file' });
-// //   }
-// // };
-
-
-
-
-
-// // Export the multer middleware
-
-
-// // const { uploadFile, getFileStream } = require('../S3')
-
-// // const handleUpload = async (req, res) => {
-// //   const file = req.file;
-// //   if(!file) {
-// //     return res.status(400).json({error: 'File is Missing'})
-// //  }
-
-// //  try { const result = await uploadFile(file);
-// //   console.log('S3 Upload Result', result)
-// //   res.json ({imageUrl: result.Location});
-
-  
-// //  } catch (error) {
-// //   console.error ('Error uploading to S3:', error);
-// //   res.status(500).json({error: 'Failed to upload to S3'})
-  
-// //  }
-// // };
-
-// // const handleGetImage = (req, res) => {
-// //   const key = req.params.key;
-// //   const readStream = getFileStream(key)
-// //   readStream.pipe(res)
-// // };
-
-
-// // module.exports = { handleUpload, handleGetImage}
-
-
-
-
-
-
-
-
-
-
-// // const multer = require("multer");
-// // const multerS3 = require("multer-s3");
-// // const AWS = require("aws-sdk")
-// // const Upload = require("../Models/upload.model");
-
-
-
-// // const s3 = new AWS.S3({
-// //   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-// //   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-// //   region: process.env.AWS_REGION,
-// // });
-
-// // const upload = multer({
-// //   storage: multerS3({
-// //     s3: s3,
-// //     bucket: process.env.AWS_BUCKET_NAME,
-// //     acl: "public-read",
-// //     contentType: multerS3.AUTO_CONTENT_TYPE,
-// //     metadata: (req, file, cb) => {
-// //       cb(null, { fieldName: file.fieldname });
-// //     },
-// //     key: (req, file, cb) => {
-// //       cb(null, `${Date.now().toString()}-${file.originalname}`);
-// //     },
-// //   }),
-// // });
-
-// // const uploadFiles = upload.array("files", 10);
-
-// // exports.uploadFiles = async (req, res) => {
-// //   try {
-// //     await new Promise((resolve, reject) => {
-// //       uploadFiles(req, res, (err) => {
-// //         if (err) reject(err);
-// //         else resolve();
-// //       });
-// //     });
-
-// //     const uploads = req.files.map((file) => ({
-// //       filename: file.originalname,
-// //       s3Url: file.location,
-// //     }));
-
-// //     await Upload.insertMany(uploads);
-// //     res.status(200).send("Files uploaded and saved successfully");
-// //   } catch (err) {
-// //     res.status(500).send("Failed to upload file or save file details");
-// //   }
-// // };
-
-// // Test S3 connection
-// // (async () => {
-// //   try {
-// //     await s3.putObject({
-// //       Body: "Hello World",
-// //       Bucket: process.env.
-// // AWS_BUCKET_NAME,
-// //       Key: "TestingII.txt",
-// //     }).promise();
-// //     console.log("Test file uploaded successfully");
-// //   } catch (error) {
-// //     console.error("Failed to upload test file", error);
-// //   }
-// // })();
-
-
-
-
-
-// // const multer = require ("multer")
-// // const multerS3 = require ("multer-s3")
-// // const AWS = require ('aws-sdk')
-// // const Upload = require("../Models/upload.model")
-
-// // const s3 = new AWS.S3({
-// //     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-// //     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-// //     region: process.env.AWS_REGION
-// //   });
-
-
-// // const upload = multer({
-
-
-  
-// //     storage: multerS3({
-// //       s3: s3,
-// //       bucket: process.env.
-// // AWS_BUCKET_NAME,
-// //       acl: "public-read",
-// //       contentType: multerS3.AUTO_CONTENT_TYPE,
-// //       metadata: (req, file, cb) => {
-// //         cb(null, { fieldName: file.fieldname });
-// //       },
-// //       key: (req, file, cb) => {
-// //         cb(null, `${Date.now().toString()}-${file.originalname}`);
-// //       },
-// //     }),
-  
-// // })
-
-
-
-// // const uploadFiles = upload.array("files", 10);
-
-// // exports.uploadFiles = async (req, res) => {
-// //     try { 
-// //         await new Promise ((resolve, reject)=> {
-// //             uploadFiles(req, res, (err )=> {
-// //                 if (err) reject (err);
-// //                 else resolve();
-// //             });
-// //         });
-// //     const uploads = req.files.map(file => ({
-// //         filename: file.originalname,
-// //         s3Url: file.location,
-// //     }));
-
-// //     await Upload.insertMany(uploads);
-// //     res.status(200).send("Files uploaded and saved successfully")
-        
-// //     } catch (err) {
-// //         res.status(500).send("Failed to upload File or save File details")
-        
-// //     }
-// // };
-
-
-// // (async () => {
-// //     try {
-// //       await s3.putObject({
-// //         Body: "Hello World",
-// //         Bucket: iluploadmetest,
-// //         Key: "TestingII.txt",
-// //       }).promise();
-// //       console.log("Test file uploaded successfully");
-// //     } catch (error) {
-// //       console.error("Failed to upload test file", error);
-// //     }
-// //   })();
-
-
-
-// // const { uploadFile, getFileStream } = require('../S3')
-
-// // const multer = require('multer');
-// // const Upload = require('../Models/upload.model');
-
-// // const upload = multer ({ dest: 'uploads/'});
-
-// // exports.uploadSingleFile = async (req, res) => {
-// //   const file = req.file;
-
-// //   if (!file) {
-// //     return res.status(400).json({ error: 'File is missing' });
-// //   }
-
-// //   try {
-// //     const result = await uploadFile(file); // Upload to S3
-// //     console.log('S3 Upload Result', result);
-
-// //     const newUpload = new Upload({
-// //       filename: file.filename,
-// //       originalName: file.originalname,
-// //       fileUrl: result.Location, // Save the S3 URL
-// //     });
-
-// //     await newUpload.save();
-
-// //     res.status(200).json({ message: 'File uploaded successfully', file: newUpload });
-// //   } catch (error) {
-// //     console.error('Error saving file to database:', error);
-// //     res.status(500).json({ error: 'Failed to save file information' });
-// //   }
-// // };
-
-// // exports.handleGetImage = (req, res) => {
-// //   const key = req.params.key;
-// //   const readStream = getFileStream(key);
-// //   readStream.pipe(res);
-// // };
-
-// // // Export the multer middleware
-// // exports.uploadMiddleware = upload.single('document');
-
-
-
-// // // const handleUpload = async (req, res) => {
-// // //   const file = req.file;
-// // //   if(!file) {
-// // //     return res.status(400).json({error: 'File is Missing'})
-// // //  }
-
-// // //  try { const result = await uploadFile(file);
-// // //   console.log('S3 Upload Result', result)
-// // //   res.json ({imageUrl: result.Location});
-
-  
-// // //  } catch (error) {
-// // //   console.error ('Error uploading to S3:', error);
-// // //   res.status(500).json({error: 'Failed to upload to S3'})
-  
-// // //  }
-// // // };
-
-// // exports. handleGetImage = (req, res) => {
-// //   const key = req.params.key;
-// //   const readStream = getFileStream(key)
-// //   readStream.pipe(res)
-// // };
-
-
-// // exports.uploadMiddleware = upload.single('document')
-
-
-
-
-
-
-
-
-
-
-// // const multer = require("multer");
-// // const multerS3 = require("multer-s3");
-// // const AWS = require("aws-sdk")
-// // const Upload = require("../Models/upload.model");
-
-
-
-// // const s3 = new AWS.S3({
-// //   accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-// //   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-// //   region: process.env.AWS_REGION,
-// // });
-
-// // const upload = multer({
-// //   storage: multerS3({
-// //     s3: s3,
-// //     bucket: process.env.AWS_BUCKET_NAME,
-// //     acl: "public-read",
-// //     contentType: multerS3.AUTO_CONTENT_TYPE,
-// //     metadata: (req, file, cb) => {
-// //       cb(null, { fieldName: file.fieldname });
-// //     },
-// //     key: (req, file, cb) => {
-// //       cb(null, `${Date.now().toString()}-${file.originalname}`);
-// //     },
-// //   }),
-// // });
-
-// // const uploadFiles = upload.array("files", 10);
-
-// // exports.uploadFiles = async (req, res) => {
-// //   try {
-// //     await new Promise((resolve, reject) => {
-// //       uploadFiles(req, res, (err) => {
-// //         if (err) reject(err);
-// //         else resolve();
-// //       });
-// //     });
-
-// //     const uploads = req.files.map((file) => ({
-// //       filename: file.originalname,
-// //       s3Url: file.location,
-// //     }));
-
-// //     await Upload.insertMany(uploads);
-// //     res.status(200).send("Files uploaded and saved successfully");
-// //   } catch (err) {
-// //     res.status(500).send("Failed to upload file or save file details");
-// //   }
-// // };
-
-// // Test S3 connection
-// // (async () => {
-// //   try {
-// //     await s3.putObject({
-// //       Body: "Hello World",
-// //       Bucket: process.env.
-// // AWS_BUCKET_NAME,
-// //       Key: "TestingII.txt",
-// //     }).promise();
-// //     console.log("Test file uploaded successfully");
-// //   } catch (error) {
-// //     console.error("Failed to upload test file", error);
-// //   }
-// // })();
-
-
-
-
-
-// // const multer = require ("multer")
-// // const multerS3 = require ("multer-s3")
-// // const AWS = require ('aws-sdk')
-// // const Upload = require("../Models/upload.model")
-
-// // const s3 = new AWS.S3({
-// //     accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-// //     secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-// //     region: process.env.AWS_REGION
-// //   });
-
-
-// // const upload = multer({
-
-
-  
-// //     storage: multerS3({
-// //       s3: s3,
-// //       bucket: process.env.
-// // AWS_BUCKET_NAME,
-// //       acl: "public-read",
-// //       contentType: multerS3.AUTO_CONTENT_TYPE,
-// //       metadata: (req, file, cb) => {
-// //         cb(null, { fieldName: file.fieldname });
-// //       },
-// //       key: (req, file, cb) => {
-// //         cb(null, `${Date.now().toString()}-${file.originalname}`);
-// //       },
-// //     }),
-  
-// // })
-
-
-
-// // const uploadFiles = upload.array("files", 10);
-
-// // exports.uploadFiles = async (req, res) => {
-// //     try { 
-// //         await new Promise ((resolve, reject)=> {
-// //             uploadFiles(req, res, (err )=> {
-// //                 if (err) reject (err);
-// //                 else resolve();
-// //             });
-// //         });
-// //     const uploads = req.files.map(file => ({
-// //         filename: file.originalname,
-// //         s3Url: file.location,
-// //     }));
-
-// //     await Upload.insertMany(uploads);
-// //     res.status(200).send("Files uploaded and saved successfully")
-        
-// //     } catch (err) {
-// //         res.status(500).send("Failed to upload File or save File details")
-        
-// //     }
-// // };
-
-
-// // (async () => {
-// //     try {
-// //       await s3.putObject({
-// //         Body: "Hello World",
-// //         Bucket: iluploadmetest,
-// //         Key: "TestingII.txt",
-// //       }).promise();
-// //       console.log("Test file uploaded successfully");
-// //     } catch (error) {
-// //       console.error("Failed to upload test file", error);
-// //     }
-// //   })()
