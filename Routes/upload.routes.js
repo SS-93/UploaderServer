@@ -38,6 +38,9 @@ router.put('/parks/:parkId/documents', uploadController.updateParkDocuments);
 router.post('/move-documents/:claimId', uploadController.moveDocumentsToClaim);
 // router.post('/move-documents/:claimId', uploadController.sortDocumentToClaim);
 
+router.post('/move-document/:claimId/:documentId', uploadController.moveSingleDocumentToClaim);
+
+
 
 // // Update documents associated with a ParkingSession
 router.put('/park-sessions/:parkingSessionId/documents', uploadController.updateParkingSessionDocuments);
@@ -95,6 +98,8 @@ router.put('/documents/:parkId/documents', async (req, res) => {
         res.status(500).json({ error: 'Failed to update documents' });
     }
 });
+
+
 
 
 

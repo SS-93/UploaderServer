@@ -470,6 +470,142 @@ exports.moveDocumentsToClaim = async (req, res) => {
   }
 };
 
+
+
+// Helper function to process a batch of documents
+async function processBatch(claimId, docsToMove) {
+  try {
+      // Initialize bulk operations for both Claim and ParkedUpload collections
+      const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+      const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+
+      docsToMove.forEach((doc) => {
+          console.log(`Adding document ${doc._id} to Claim ${claimId}`);
+
+          // Add the document to the claim's documents array using $push
+          bulkUpdateClaim.find({ _id: new mongoose.Types.ObjectId(claimId) }).updateOne({
+              $push: {
+                  documents: {
+                      _id: new mongoose.Types.ObjectId(),
+                      fileName: doc.filename,
+                      fileUrl: doc.fileUrl,
+                      uploadDate: doc.uploadDate,
+                      textContent: doc.textContent,
+                      category: doc.category,
+                  },
+              },
+          });
+
+          // Remove the document from ParkedUpload
+          bulkRemoveParked.find({ _id: doc._id }).deleteOne();
+      });
+
+      // Execute both bulk operations only if there are operations queued
+      if (bulkUpdateClaim.s.currentBatch && bulkUpdateClaim.s.currentBatch.operations.length > 0) {
+          await bulkUpdateClaim.execute();
+      } else {
+          console.log("No operations to execute in bulkUpdateClaim.");
+      }
+
+      if (bulkRemoveParked.s.currentBatch && bulkRemoveParked.s.currentBatch.operations.length > 0) {
+          await bulkRemoveParked.execute();
+      } else {
+          console.log("No operations to execute in bulkRemoveParked.");
+      }
+  } catch (error) {
+      console.error('Error processing batch:', error);
+      throw new Error('Batch processing failed');
+  }
+}
+
+// New function to move a single document from ParkedUpload to a Claim
+exports.moveSingleDocumentToClaim = async (req, res) => {
+  const { claimId, documentId } = req.params;  // Get claimId and documentId from request parameters
+
+  try {
+    // Find the document in ParkedUpload by its documentId
+    const doc = await ParkedUpload.findById(documentId);
+
+    if (!doc) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Initialize bulk operations for Claim and ParkedUpload
+    const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
+    const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
+
+    // Add the document to the claim's documents array
+    bulkUpdateClaim.find({ _id: new mongoose.Types.ObjectId(claimId) }).updateOne({
+      $push: {
+        documents: {
+          _id: new mongoose.Types.ObjectId(),
+          fileName: doc.filename,
+          fileUrl: doc.fileUrl,
+          uploadDate: doc.uploadDate,
+          textContent: doc.textContent,
+          category: doc.category,
+        },
+      },
+    });
+
+    // Remove the document from ParkedUpload
+    bulkRemoveParked.find({ _id: doc._id }).deleteOne();
+
+    // Execute both bulk operations
+    if (bulkUpdateClaim.s.currentBatch && bulkUpdateClaim.s.currentBatch.operations.length > 0) {
+      await bulkUpdateClaim.execute();
+    }
+
+    if (bulkRemoveParked.s.currentBatch && bulkRemoveParked.s.currentBatch.operations.length > 0) {
+      await bulkRemoveParked.execute();
+    }
+
+    res.status(200).json({ message: 'Document moved successfully!' });
+  } catch (error) {
+    console.error('Error moving document:', error);
+    res.status(500).json({ error: 'Failed to move document' });
+  }
+};
+
+
+exports.handleGetImage = (req, res) => {
+  const key = req.params.key;
+  const readStream = getFileStream(key);
+  readStream.pipe(res);
+}; 
+
+
+
+exports.handleGetFile = (req, res) => {
+  const key = req.params.key;
+  try {
+      const readStream = getFileStream(key);
+      res.setHeader('Content-Disposition', `attachment; filename="${key}"`);
+      res.setHeader('Content-Type', 'application/octet-stream');
+      readStream.pipe(res);
+  } catch (error) {
+      console.error('Error fetching file:', error);
+      res.status(500).json({ error: 'Failed to fetch file' });
+  }
+};
+
+exports.getSignedUrl = async (req, res) => {
+  const key = req.params.key;
+  try { const url = await getSignedUrl(key)
+res.status(200).json({url});    
+  } catch (error) {
+    res.status(500).json({error:'Failed to get signed URL'})
+    
+  }
+}
+
+
+
+
+// exports.uploadMiddleware = upload.single('document');
+exports.uploadMiddleware = upload.array('documents', 10);
+
+
 // Helper function to process a batch of documents
 // async function processBatch(claimId, docsToMove) {
 //   try {
@@ -578,90 +714,3 @@ exports.moveDocumentsToClaim = async (req, res) => {
 //     throw new Error('Batch processing failed');
 //   }
 // }
-
-// Helper function to process a batch of documents
-async function processBatch(claimId, docsToMove) {
-  try {
-      // Initialize bulk operations for both Claim and ParkedUpload collections
-      const bulkUpdateClaim = Claim.collection.initializeUnorderedBulkOp();
-      const bulkRemoveParked = ParkedUpload.collection.initializeUnorderedBulkOp();
-
-      docsToMove.forEach((doc) => {
-          console.log(`Adding document ${doc._id} to Claim ${claimId}`);
-
-          // Add the document to the claim's documents array using $push
-          bulkUpdateClaim.find({ _id: new mongoose.Types.ObjectId(claimId) }).updateOne({
-              $push: {
-                  documents: {
-                      _id: new mongoose.Types.ObjectId(),
-                      fileName: doc.filename,
-                      fileUrl: doc.fileUrl,
-                      uploadDate: doc.uploadDate,
-                      textContent: doc.textContent,
-                      category: doc.category,
-                  },
-              },
-          });
-
-          // Remove the document from ParkedUpload
-          bulkRemoveParked.find({ _id: doc._id }).deleteOne();
-      });
-
-      // Execute both bulk operations only if there are operations queued
-      if (bulkUpdateClaim.s.currentBatch && bulkUpdateClaim.s.currentBatch.operations.length > 0) {
-          await bulkUpdateClaim.execute();
-      } else {
-          console.log("No operations to execute in bulkUpdateClaim.");
-      }
-
-      if (bulkRemoveParked.s.currentBatch && bulkRemoveParked.s.currentBatch.operations.length > 0) {
-          await bulkRemoveParked.execute();
-      } else {
-          console.log("No operations to execute in bulkRemoveParked.");
-      }
-  } catch (error) {
-      console.error('Error processing batch:', error);
-      throw new Error('Batch processing failed');
-  }
-}
-
-
-
-exports.handleGetImage = (req, res) => {
-  const key = req.params.key;
-  const readStream = getFileStream(key);
-  readStream.pipe(res);
-}; 
-
-
-
-exports.handleGetFile = (req, res) => {
-  const key = req.params.key;
-  try {
-      const readStream = getFileStream(key);
-      res.setHeader('Content-Disposition', `attachment; filename="${key}"`);
-      res.setHeader('Content-Type', 'application/octet-stream');
-      readStream.pipe(res);
-  } catch (error) {
-      console.error('Error fetching file:', error);
-      res.status(500).json({ error: 'Failed to fetch file' });
-  }
-};
-
-exports.getSignedUrl = async (req, res) => {
-  const key = req.params.key;
-  try { const url = await getSignedUrl(key)
-res.status(200).json({url});    
-  } catch (error) {
-    res.status(500).json({error:'Failed to get signed URL'})
-    
-  }
-}
-
-
-
-
-// exports.uploadMiddleware = upload.single('document');
-exports.uploadMiddleware = upload.array('documents', 10);
-
-
