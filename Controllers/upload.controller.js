@@ -1,5 +1,5 @@
 
-// Controllers/upload.controller.js
+// Controllers/upload.controller.
 const multer = require('multer');
 const { ParkedUpload, Upload} = require('../Models/upload.model'); // Adjust the path to your actual model file
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
@@ -102,7 +102,7 @@ exports.uploadFiles = async (req, res) => {
     await claim.save();
 
     res.status(200).json({
-      message: `${uploadedFiles.length} file(s) uploaded successfully and associated with the claim`,
+      message: `${uploadedFiles.length} file(s) uploaded successfully and associated with the                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            claim`,
       files: uploadedFiles,
     });
   } catch (error) {
@@ -111,6 +111,24 @@ exports.uploadFiles = async (req, res) => {
   }
 };
 
+
+const generateUniqueDocumentId = async () => {
+  let isUnique = false;
+  let documentId;
+  
+  while (!isUnique) {
+    // Generate random 4-digit number
+    documentId = Math.floor(1000 + Math.random() * 9000);
+    
+    // Check if this documentId already exists in the ParkedUpload collection
+    const existingDocument = await ParkedUpload.findOne({ documentId });
+    if (!existingDocument) {
+      isUnique = true; // If no document found, this ID is unique
+    }
+  }
+
+  return documentId;
+};
 
 exports.bulkUploadFilesWithoutClaim = async (req, res) => {
   const files = req.files;
@@ -126,12 +144,15 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
       const result = await uploadFile(file);
       const signedUrl = await getSignedUrl(result.Key);
 
+ const documentId = await generateUniqueDocumentId();
+
       const newUpload = new ParkedUpload({
         filename: result.Key,
         originalName: file.originalname,
         fileUrl: signedUrl,
         mimetype: file.mimetype,
-        parkId, // Ensure parkId is passed correctly
+        parkId: parkId, // Ensure parkId is passed correctly
+        documentId: documentId, // Ensure documentId is passed correctly
         category: Array.isArray(category) ? category[0] : category || 'Uncategorized',  // Ensure category is a string
       });
 
@@ -148,9 +169,6 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
     res.status(500).json({ error: 'Failed to upload files' });
   }
 };
-
-
-
 
 
 exports.getParkedUploads = async (req, res) => {
@@ -235,9 +253,9 @@ exports.updateParkingSessionDocuments = async (req, res) => {
 };
 
 
-
+//! IN USE
 exports.updateDocumentDetails = async (req, res) => {
-  const { documentId } = req.params; // Document ID from the request parameters
+  const { id } = req.params; // Document ID from the request parameters
   const updates = req.body; // Object containing the updates for the document
 
   try {
@@ -262,6 +280,28 @@ exports.updateDocumentDetails = async (req, res) => {
     res.status(500).json({ error: 'Failed to update document' });
   }
 };
+
+exports.updateDocumentTextContent = async (req, res) => {
+  const { id } = req.params;ß
+  const { textContent } = req.body;
+
+  try {
+      const document = await ParkedUpload.findByIdAndUpdate(id);
+
+      if (!document) {
+          return res.status(404).json({ message: 'Document not found' });
+      }
+
+      document.textContent = textContent;
+      await document.save();
+
+      res.status(200).json({ message: 'Document text content updated successfully', document });
+  } catch (err) {
+      console.error('Error updating document text content:', err);
+      res.status(500).json({ error: 'Failed to update document text content' });
+  }
+};
+
 
 // Delete a document
 exports.deleteDocument = async (req, res) => {
@@ -566,6 +606,150 @@ exports.moveSingleDocumentToClaim = async (req, res) => {
     res.status(500).json({ error: 'Failed to move document' });
   }
 };
+
+// update text content to
+
+// exports.updateDocumentTextContent = async (req, res) => {
+//   const { documentId } = req.params; // Document ID from the request parameters
+//   const { textContent } = req.body; // Extract text content from the request body
+
+//   try {
+//     // Find the document by its ID
+//     const document = await ParkedUpload.findById(documentId);
+
+//     if (!document) {
+//       return res.status(404).json({ message: 'Document not found' });
+//     }
+
+//     // Update document's textContent field
+//     document.textContent = textContent;
+
+//     // Save the updated document
+//     await document.save();
+
+//     res.status(200).json({ message: 'Document text content updated successfully', document });
+//   } catch (err) {
+//     console.error('Error updating document text content:', err);
+//     res.status(500).json({ error: 'Failed to update document text content' });
+//   }
+// };
+
+
+//? OCR
+
+// Function to save or update OCR text for a document by documentId
+exports.saveOcrText = async (req, res) => {
+  const { documentId, ocrTextContent } = req.body; // Extract documentId and OCR text
+
+  try {
+    // Find the parked upload by its documentId
+    const document = await ParkedUpload.findOne({ documentId });
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    // Update the document's textContent with the new OCR text
+    document.textContent = ocrTextContent;
+
+    // Save the updated document
+    await document.save();
+
+    res.status(200).json({ message: 'OCR text content saved successfully', document });
+  } catch (err) {
+    console.error('Error saving OCR text content:', err);
+    res.status(500).json({ error: 'Failed to save OCR text content' });
+  }
+};
+
+// Controller to fetch document by documentId
+exports.getDocumentByDocumentId = async (req, res) => {
+  const { documentId } = req.params;
+
+  try {
+    const document = await ParkedUpload.findOne({ documentId });
+    if (!document) {
+      return res.status(404).json({ message: 'Document not found' });
+    }
+
+    res.status(200).json({ document });
+  } catch (err) {
+    console.error('Error fetching document:', err);
+    res.status(500).json({ error: 'Failed to fetch document' });
+  }
+};
+exports.updateDocumentDetails = async (req, res) => {
+  try {
+    // Extract documentId from route params
+    const { documentId } = req.params; 
+    const { textContent } = req.body;  // Assuming you're updating the textContent
+
+    // Find the document by documentId
+    const document = await ParkedUpload.findOne({ documentId });
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Update document details (in this case, textContent)
+    document.textContent = textContent;
+    await document.save();
+
+    res.status(200).json({ message: 'Document updated successfully', document });
+  } catch (error) {
+    console.error('Error updating document:', error);
+    res.status(500).json({ error: 'Failed to update document' });
+  }
+};
+
+
+
+// exports.updateOcrTextByDocumentId = async (req, res) => {
+//   const { documentId, ocrTextContent } = req.body;  // Extracting documentId and ocrTextContent
+
+//   try {
+//     // Find the parked upload by its documentId
+//     const document = await ParkedUpload.findOne({ documentId });
+//     if (!document) {
+//       return res.status(404).json({ message: 'Document not found' });
+//     }
+
+//     // Create a new OCR text entry linked to the documentId
+//     const ocrText = new OcrText({
+//       documentUrl: document.fileUrl,  // Using the file URL from the found document
+//       documentId: documentId,
+//       ocrTextContent: ocrTextContent
+//     });
+
+//     // Save the OCR text extraction
+//     await ocrText.save();
+
+//     res.status(200).json({ message: 'OCR text content added successfully', ocrText });
+//   } catch (err) {
+//     console.error('Error updating OCR text content:', err);
+//     res.status(500).json({ error: 'Failed to update OCR text content' });
+//   }
+// };
+
+// // Fetch all OCR text entries by documentId
+// exports.getOcrTextsByDocumentId = async (req, res) => {
+//   const { documentId } = req.params;
+
+//   try {
+//     const ocrTexts = await OcrText.find({ documentId });
+
+//     if (!ocrTexts || ocrTexts.length === 0) {
+//       return res.status(404).json({ message: 'No OCR text found for the given documentId' });
+//     }
+
+//     res.status(200).json({ ocrTexts });
+//   } catch (err) {
+//     console.error('Error fetching OCR text content:', err);
+//     res.status(500).json({ error: 'Failed to fetch OCR text content' });
+//   }
+// };
+
+
+
+
 
 
 exports.handleGetImage = (req, res) => {

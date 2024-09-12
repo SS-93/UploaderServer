@@ -7,11 +7,12 @@ const cors = require("cors");
 
 const ClaimFile = require("./Controllers/claims.controller");
 const uploadRoutes = require("./Routes/upload.routes");
+const ocrProcessor = require ('./Routes/ocr.routes')
 // const OcrProcessor = require('./ocrProcessor')
 
 const { uploadFile, getFileStream, getSignedUrl } = require('./S3');
 
-const app = express();
+const app = express(); 
 const { PORT, MONGO } = process.env;
 
 mongoose.connect(`${MONGO}/UploaderServer`, {
@@ -29,6 +30,7 @@ app.use(cors());
 
 app.use("/new", ClaimFile);
 app.use('/dms', uploadRoutes);
+app.use('/dms', ocrProcessor)
 
 app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
 
