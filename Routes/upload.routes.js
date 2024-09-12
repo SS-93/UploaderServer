@@ -35,6 +35,13 @@ router.put('/parked-uploads/:parkId', uploadController.updateDocumentTextContent
 router.put('/documents/:documentId', uploadController.updateDocumentDetails); //! IN USE 
 router.put('/documentstext/:id', uploadController.updateDocumentTextContent); //! IN USE 
 
+router.put('/documents/edit/:documentId', uploadController.editDocumentDetails);
+router.put('/documents/edit/:documentId', (req, res) => {
+  req.params.documentId = Number(req.params.documentId);  // Ensure documentId is cast to Number
+  // Continue with the request handling logic
+  uploadController.editDocumentDetails(req, res);
+});
+
 //? OCR
 // router.put('/ocr-text/by-documentId', uploadController.updateOcrTextByDocumentId);
 
@@ -42,16 +49,21 @@ router.put('/documentstext/:id', uploadController.updateDocumentTextContent); //
 // router.get('/ocr-text/:documentId', uploadController.getOcrTextsByDocumentId);
 
 // Example route to update document details by documentId
-router.put('/documents/:documentId', uploadController.updateDocumentDetails);
+router.put('/documents/edit/:documentId', uploadController.updateDocumentDetails);
+
+// routes/documentRoutes.js
+router.put('/documents/edit/:documentId', uploadController.updateMultipleDocuments);
+
 
 // Route to save OCR text for a document by documentId
 router.put('/ocr-text/:documentId', uploadController.saveOcrText);
 
+// router.put('/documents/edit/:documentId/', uploadController.editDocument);
 
 // Route to fetch document by documentId
 router.get('/document/:documentId', uploadController.getDocumentByDocumentId);
 
-// Route to update the OCR text of a document by documentId
+//? Route to update the OCR text of a document by documentId 
 router.put('/documents/:documentId', async (req, res) => {
   const { documentId } = req.params;
   const { textContent } = req.body;
@@ -71,6 +83,9 @@ router.put('/documents/:documentId', async (req, res) => {
     res.status(500).json({ error: 'Failed to update text content.' });
   }
 });
+// routes/documentRoutes.js
+router.put('/documents/edit-batch/:documentId', uploadController.updateDocumentsBatch);
+
 
 router.delete('/documents/:documentId', uploadController.deleteDocument);
 
@@ -82,9 +97,9 @@ router.post('/move-documents/:claimId', uploadController.moveDocumentsToClaim);
 
 router.post('/move-document/:claimId/:documentId', uploadController.moveSingleDocumentToClaim);
 
-router.put('/update-document/:documentId', uploadController.updateDocumentTextContent);
+// router.put('/update-document/:documentId', uploadController.updateDocumentTextContent);
 
-router.get('/documents/:key', uploadController.updateDocumentTextContent);
+// router.get('/documents/:key', uploadController.updateDocumentTextContent);
 // // text content update. 
 // router.put('/update-document/:documentId', async (req, res) => {
 //     const { documentId } = req.params;
@@ -111,7 +126,7 @@ router.get('/documents/:key', uploadController.updateDocumentTextContent);
 
 
 // // Update documents associated with a ParkingSession
-router.put('/park-sessions/:parkingSessionId/documents', uploadController.updateParkingSessionDocuments);
+// router.put('/park-sessions/:parkingSessionId/documents', uploadController.updateParkingSessionDocuments);
 
 // Route to get document details by ID
 // router.get('/get-document/:id', async (req, res) => {
@@ -241,58 +256,58 @@ router.get('/get-document/:id', async (req, res) => {
   });
 
 //  Edit documents without a claim 
-router.put('/documents', async (req, res) => {
-    const updates = req.body; // Assuming this is an array of document updates
+// router.put('/documents', async (req, res) => {
+//     const updates = req.body; // Assuming this is an array of document updates
 
-    try {
-        // Iterate over each update and apply it to the correct document
-        for (const update of updates) {
-            const document = await ParkedUpload.findById(update._id); // Make sure ParkedUpload is correctly imported
-            if (document) {
-                if (update.fileName) document.fileName = update.fileName;
-                if (update.category) document.category = update.category;
-                // Apply other updates as needed
+//     try {
+//         // Iterate over each update and apply it to the correct document
+//         for (const update of updates) {
+//             const document = await ParkedUpload.findById(update._id); // Make sure ParkedUpload is correctly imported
+//             if (document) {
+//                 if (update.fileName) document.fileName = update.fileName;
+//                 if (update.category) document.category = update.category;
+//                 // Apply other updates as needed
 
-                await document.save(); // Save each updated document
-            }
-        }
+//                 await document.save(); // Save each updated document
+//             }
+//         }
 
-        res.status(200).json({ message: 'Documents updated successfully' });
-    } catch (err) {
-        console.error('Error updating documents:', err);
-        res.status(500).json({ error: 'Failed to update documents' });
-    }
-});
+//         res.status(200).json({ message: 'Documents updated successfully' });
+//     } catch (err) {
+//         console.error('Error updating documents:', err);
+//         res.status(500).json({ error: 'Failed to update documents' });
+//     }
+// });
 //updated and edit multiple parked documents 
-router.put('/documents/:parkId/documents', async (req, res) => {
-    const { claimId } = req.params;
-    const updates = req.body; // Assuming this is an array of document updates
+// router.put('/documents/:parkId/documents', async (req, res) => {
+//     const { claimId } = req.params;
+//     const updates = req.body; // Assuming this is an array of document updates
 
-    try {
-        const claim = await Claim.findById(claimId);
-        if (!claim) {
-            return res.status(404).json({ message: 'Claim not found' });
-        }
+//     try {
+//         const claim = await Claim.findById(claimId);
+//         if (!claim) {
+//             return res.status(404).json({ message: 'Claim not found' });
+//         }
 
-        // Iterate over each update and apply it to the correct document
-        updates.forEach(update => {
-            const document = claim.documents.id(update._id);
-            if (document) {
-                if (update.fileName) document.fileName = update.fileName;
-                if (update.category) document.category = update.category;
-                // Apply other updates as needed
-            }
-        });
+//         // Iterate over each update and apply it to the correct document
+//         updates.forEach(update => {
+//             const document = claim.documents.id(update._id);
+//             if (document) {
+//                 if (update.fileName) document.fileName = update.fileName;
+//                 if (update.category) document.category = update.category;
+//                 // Apply other updates as needed
+//             }
+//         });
 
-        // Save the updated claim with the modified documents
-        await claim.save();
+//         // Save the updated claim with the modified documents
+//         await claim.save();
 
-        res.status(200).json({ message: 'Documents updated successfully' });
-    } catch (err) {
-        console.error('Error updating documents:', err);
-        res.status(500).json({ error: 'Failed to update documents' });
-    }
-});
+//         res.status(200).json({ message: 'Documents updated successfully' });
+//     } catch (err) {
+//         console.error('Error updating documents:', err);
+//         res.status(500).json({ error: 'Failed to update documents' });
+//     }
+// });
 
 
 
