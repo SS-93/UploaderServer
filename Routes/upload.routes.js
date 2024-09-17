@@ -35,12 +35,13 @@ router.put('/parked-uploads/:parkId', uploadController.updateDocumentTextContent
 router.put('/documents/:documentId', uploadController.updateDocumentDetails); //! IN USE 
 router.put('/documentstext/:id', uploadController.updateDocumentTextContent); //! IN USE 
 
-router.put('/documents/edit/:documentId', uploadController.editDocumentDetails);
-router.put('/documents/edit/:documentId', (req, res) => {
-  req.params.documentId = Number(req.params.documentId);  // Ensure documentId is cast to Number
-  // Continue with the request handling logic
-  uploadController.editDocumentDetails(req, res);
-});
+//? Edit
+router.put('/documents/:documentId', uploadController.editDocumentDetails);
+// router.put('/documents/edit/:documentId', (req, res) => {
+//   req.params.documentId = Number(req.params.documentId);  // Ensure documentId is cast to Number
+//   // Continue with the request handling logic
+//   uploadController.editDocumentDetails(req, res);
+// });
 
 //? OCR
 // router.put('/ocr-text/by-documentId', uploadController.updateOcrTextByDocumentId);
@@ -49,10 +50,10 @@ router.put('/documents/edit/:documentId', (req, res) => {
 // router.get('/ocr-text/:documentId', uploadController.getOcrTextsByDocumentId);
 
 // Example route to update document details by documentId
-router.put('/documents/edit/:documentId', uploadController.updateDocumentDetails);
+// router.put('/documents/edit/:documentId', uploadController.updateDocumentDetails);
 
-// routes/documentRoutes.js
-router.put('/documents/edit/:documentId', uploadController.updateMultipleDocuments);
+// // routes/documentRoutes.js
+// router.put('/documents/edit/:documentId', uploadController.updateMultipleDocuments);
 
 
 // Route to save OCR text for a document by documentId

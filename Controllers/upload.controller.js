@@ -318,37 +318,58 @@ exports.updateParkingSessionDocuments = async (req, res) => {
 //   }
 // };
 
+// exports.editDocumentDetails = async (req, res) => {
+//   const { documentId } = req.params;  // Ensure that documentId is extracted from the request params
+//   const updates = req.body;           // The updates sent in the request body
+
+//   try {
+//     // Validate if documentId is a valid number
+//     if (isNaN(documentId)) {
+//       return res.status(400).json({ error: 'Invalid document ID' });
+//     }
+
+//     const document = await ParkedUpload.findOne({ documentId: Number(documentId) });
+
+//     if (!document) {
+//       return res.status(404).json({ error: 'Document not found' });
+//     }
+
+//     // Apply updates
+//     if (updates.fileName !== undefined) document.filename = updates.fileName;
+//     if (updates.category !== undefined) document.category = updates.category;
+
+//     // Save the updated document
+//     await document.save();
+
+//     res.status(200).json({ message: 'Document updated successfully', document });
+//   } catch (err) {
+//     console.error('Error updating document:', err);
+//     res.status(500).json({ error: 'Failed to update document' });
+//   }
+// };
+
+
 exports.editDocumentDetails = async (req, res) => {
-  const { documentId } = req.params;  // Ensure that documentId is extracted from the request params
-  const updates = req.body;           // The updates sent in the request body
+  const { id } = req.params;
+  const { fileName, category } = req.body;
 
   try {
-    // Validate if documentId is a valid number
-    if (isNaN(documentId)) {
-      return res.status(400).json({ error: 'Invalid document ID' });
-    }
+    const updatedDocument = await ParkedUpload.findByIdAndUpdate(
+      id,
+      { filename: fileName, category },
+      { new: true, runValidators: true }
+    );
 
-    const document = await ParkedUpload.findOne({ documentId: Number(documentId) });
-
-    if (!document) {
+    if (!updatedDocument) {
       return res.status(404).json({ error: 'Document not found' });
     }
 
-    // Apply updates
-    if (updates.fileName !== undefined) document.filename = updates.fileName;
-    if (updates.category !== undefined) document.category = updates.category;
-
-    // Save the updated document
-    await document.save();
-
-    res.status(200).json({ message: 'Document updated successfully', document });
+    res.status(200).json({ message: 'Document updated successfully', document: updatedDocument });
   } catch (err) {
     console.error('Error updating document:', err);
     res.status(500).json({ error: 'Failed to update document' });
   }
 };
-
-
 // exports.editDocumentDetails = async (req, res) => {
 //   const { id } = req.params; // Document ID from the request parameters
 //   const updates = req.body; // Object containing the updates for the document
@@ -377,7 +398,7 @@ exports.editDocumentDetails = async (req, res) => {
 // };
 
 exports.updateDocumentTextContent = async (req, res) => {
-  const { id } = req.params;ß
+  const { id } = req.params;
   const { textContent } = req.body;
 
   try {
