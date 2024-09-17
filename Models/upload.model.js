@@ -11,7 +11,7 @@ const ParkingSchema = new mongoose.Schema({
   category: { type: String, required: false },
 
   OcrId: { type: Number, required: true, unique: true },
-    documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'ParkedUpload', required: false },
+    // documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'ParkedUpload', required: false },
 });
 
 

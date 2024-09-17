@@ -36,7 +36,35 @@ router.put('/documents/:documentId', uploadController.updateDocumentDetails); //
 router.put('/documentstext/:id', uploadController.updateDocumentTextContent); //! IN USE 
 
 //? Edit
-router.put('/documents/:documentId', uploadController.editDocumentDetails);
+
+router.put('/documents/:documentId', async (req, res) => {
+  const { documentId } = req.params;
+  const { textContent, fileName,  } = req.body;
+
+  try {
+    if (!mongoose.Types.ObjectId.isValid(documentId)) {
+      return res.status(400).json({ error: 'Invalid document ID' });
+    }
+
+    const document = await ParkedUpload.findById(documentId);
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    // Update the fields
+    if (textContent !== undefined) document.textContent = textContent;
+    if (fileName !== undefined) document.filename = fileName;
+    // if (category !== undefined) document.category = category;
+
+    await document.save();
+
+    res.status(200).json({ message: 'Document updated successfully.', document });
+  } catch (error) {
+    console.error('Error updating document:', error);
+    res.status(500).json({ error: 'Failed to update document.' });
+  }
+});
+// router.put('/documents/:documentId', uploadController.editDocumentDetails);
 // router.put('/documents/edit/:documentId', (req, res) => {
 //   req.params.documentId = Number(req.params.documentId);  // Ensure documentId is cast to Number
 //   // Continue with the request handling logic

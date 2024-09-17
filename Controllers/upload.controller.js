@@ -112,22 +112,23 @@ exports.uploadFiles = async (req, res) => {
 };
 
 
-const generateUniqueDocumentId = async () => {
+//! V2
+const generateUniqueOcrId = async () => {
   let isUnique = false;
-  let documentId;
+  let OcrId;
   
   while (!isUnique) {
     // Generate random 4-digit number
-    documentId = Math.floor(1000 + Math.random() * 9000);
+    OcrId = Math.floor(1000 + Math.random() * 9000);
     
-    // Check if this documentId already exists in the ParkedUpload collection
-    const existingDocument = await ParkedUpload.findOne({ documentId });
+    // Check if this OcrId already exists in the ParkedUpload collection
+    const existingDocument = await ParkedUpload.findOne({ OcrId });
     if (!existingDocument) {
       isUnique = true; // If no document found, this ID is unique
     }
   }
-
-  return documentId;
+  
+  return OcrId;
 };
 
 exports.bulkUploadFilesWithoutClaim = async (req, res) => {
@@ -143,8 +144,7 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
     for (const file of files) {
       const result = await uploadFile(file);
       const signedUrl = await getSignedUrl(result.Key);
-
- const documentId = await generateUniqueDocumentId();
+      const OcrId = await generateUniqueOcrId();
 
       const newUpload = new ParkedUpload({
         filename: result.Key,
@@ -152,8 +152,9 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
         fileUrl: signedUrl,
         mimetype: file.mimetype,
         parkId: parkId, // Ensure parkId is passed correctly
-        documentId: documentId, // Ensure documentId is passed correctly
-        category: Array.isArray(category) ? category[0] : category || 'Uncategorized',  // Ensure category is a string
+        OcrId: OcrId, // Use OcrId instead of documentId
+        category: Array.isArray(category) ? category[0] : category || 'Uncategorized', // Ensure category is a string
+        // The documentId field will be automatically set by MongoDB when the document is created
       });
 
       await newUpload.save();
@@ -169,6 +170,64 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
     res.status(500).json({ error: 'Failed to upload files' });
   }
 };
+
+// const generateUniqueDocumentId = async () => {
+//   let isUnique = false;
+//   let documentId;
+  
+//   while (!isUnique) {
+//     // Generate random 4-digit number
+//     documentId = Math.floor(1000 + Math.random() * 9000);
+    
+//     // Check if this documentId already exists in the ParkedUpload collection
+//     const existingDocument = await ParkedUpload.findOne({ documentId });
+//     if (!existingDocument) {
+//       isUnique = true; // If no document found, this ID is unique
+//     }
+//   }
+
+//   return documentId;
+// };
+
+// exports.bulkUploadFilesWithoutClaim = async (req, res) => {
+//   const files = req.files;
+//   if (!files || files.length === 0) {
+//     return res.status(400).json({ error: 'No files were uploaded' });
+//   }
+
+//   try {
+//     const uploadedFiles = [];
+//     const { parkId, category } = req.body; // Extract parkId and category from the request body
+
+//     for (const file of files) {
+//       const result = await uploadFile(file);
+//       const signedUrl = await getSignedUrl(result.Key);
+
+//  const documentId = await generateUniqueDocumentId();
+
+//       const newUpload = new ParkedUpload({
+//         filename: result.Key,
+//         originalName: file.originalname,
+//         fileUrl: signedUrl,
+//         mimetype: file.mimetype,
+//         parkId: parkId, // Ensure parkId is passed correctly
+//         documentId: documentId, // Ensure documentId is passed correctly
+//         category: Array.isArray(category) ? category[0] : category || 'Uncategorized',  // Ensure category is a string
+//       });
+
+//       await newUpload.save();
+//       uploadedFiles.push(newUpload);
+//     }
+
+//     res.status(200).json({
+//       message: `${uploadedFiles.length} file(s) uploaded successfully.`,
+//       files: uploadedFiles,
+//     });
+//   } catch (error) {
+//     console.error('Error during bulk upload:', error);
+//     res.status(500).json({ error: 'Failed to upload files' });
+//   }
+// };
 
 
 exports.getParkedUploads = async (req, res) => {
@@ -349,6 +408,7 @@ exports.updateParkingSessionDocuments = async (req, res) => {
 // };
 
 
+// upload.controller.js
 exports.editDocumentDetails = async (req, res) => {
   const { id } = req.params;
   const { fileName, category } = req.body;
@@ -370,6 +430,7 @@ exports.editDocumentDetails = async (req, res) => {
     res.status(500).json({ error: 'Failed to update document' });
   }
 };
+
 // exports.editDocumentDetails = async (req, res) => {
 //   const { id } = req.params; // Document ID from the request parameters
 //   const updates = req.body; // Object containing the updates for the document
