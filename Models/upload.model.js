@@ -2,7 +2,7 @@ const mongoose = require('mongoose');
 
 // Schema for parked documents (not yet associated with a claim)
 const ParkingSchema = new mongoose.Schema({
-  filename: { type: String, required: true },
+  fileName: { type: String, required: true },
 
   fileUrl: { type: String, required: true },
   mimetype: { type: String, required: true },
@@ -11,6 +11,7 @@ const ParkingSchema = new mongoose.Schema({
   category: { type: String, required: false },
 
   OcrId: { type: Number, required: true, unique: true },
+  
     // documentId: { type: mongoose.Schema.Types.ObjectId, ref: 'ParkedUpload', required: false },
 });
 
