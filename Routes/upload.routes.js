@@ -48,4 +48,8 @@ router.put('/ocr-text/:OcrId', uploadController.saveOcrText);
 // Update multiple documents
 router.put('/documents/update-multiple', uploadController.updateMultipleDocuments);
 
+// Add these routes to your existing routes file
+router.get('/ocr-text/:OcrId', uploadController.getOcrText);
+router.put('/ocr-text/:OcrId', uploadController.saveOcrText);
+
 module.exports = router;

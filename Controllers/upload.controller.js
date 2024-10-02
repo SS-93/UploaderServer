@@ -119,13 +119,13 @@ exports.getParkedUploads = async (req, res) => {
 
 exports.updateDocumentTextContent = async (req, res) => {
   const { OcrId } = req.params;
-  const { textContent } = req.body;
+  const { ocrTextContent } = req.body;  // Changed from textContent to match client-side
 
   try {
-    const document = await ParkedUpload.findOneAndUpdate({ OcrId }, { textContent }, { new: true });
+    const document = await ParkedUpload.findOneAndUpdate({ OcrId }, { textContent: ocrTextContent }, { new: true });
 
     if (!document) {
-      return res.status(404).json({ message: 'Document not found' });
+      return res.status(404).json({ error: 'Document not found' });  // Changed to error
     }
 
     res.status(200).json({ message: 'Document text content updated successfully', document });
@@ -210,7 +210,8 @@ exports.sortDocumentToClaim = async (req, res) => {
 };
 
 exports.saveOcrText = async (req, res) => {
-  const { OcrId, ocrTextContent } = req.body;
+  const { OcrId } = req.params;
+  const { ocrTextContent } = req.body;
 
   try {
     const document = await ParkedUpload.findOneAndUpdate(
@@ -220,7 +221,7 @@ exports.saveOcrText = async (req, res) => {
     );
 
     if (!document) {
-      return res.status(404).json({ message: 'Document not found' });
+      return res.status(404).json({ error: 'Document not found' });
     }
 
     res.status(200).json({ message: 'OCR text content saved successfully', document });
@@ -268,6 +269,45 @@ exports.updateDocumentDetails = async (req, res) => {
   }
 };
 
+
+// Add this new function to your existing controller
+exports.getOcrText = async (req, res) => {
+  const { OcrId } = req.params;
+  try {
+    const document = await ParkedUpload.findOne({ OcrId });
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+    res.status(200).json({ textContent: document.textContent || '' });
+  } catch (err) {
+    console.error('Error fetching OCR text:', err);
+    res.status(500).json({ error: 'Failed to fetch OCR text' });
+  }
+};
+
+// Update the existing saveOcrText function if it doesn't match this implementation
+exports.saveOcrText = async (req, res) => {
+  const { OcrId } = req.params;
+  const { ocrTextContent } = req.body;
+
+  try {
+    const document = await ParkedUpload.findOneAndUpdate(
+      { OcrId },
+      { textContent: ocrTextContent },
+      { new: true }
+    );
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
+    }
+
+    res.status(200).json({ message: 'OCR text content saved successfully', document });
+  } catch (err) {
+    console.error('Error saving OCR text content:', err);
+    res.status(500).json({ error: 'Failed to save OCR text content' });
+  }
+};
+
 exports.handleGetImage = (req, res) => {
   const key = req.params.key;
   const readStream = getFileStream(key);
@@ -296,5 +336,7 @@ exports.getSignedUrl = async (req, res) => {
     res.status(500).json({ error: 'Failed to get signed URL' });
   }
 };
+
+
 
 exports.uploadMiddleware = upload.array('documents', 10);
