@@ -3,6 +3,9 @@ const router = express.Router();
 const uploadController = require('../Controllers/upload.controller');
 const { ParkedUpload, OcrText } = require('../Models/upload.model');
 
+const aiController = require('../Controllers/ai.controller');
+
+
 // Bulk upload route
 router.post('/bulk-upload', uploadController.uploadMiddleware, uploadController.bulkUploadFilesWithoutClaim);
 
@@ -51,5 +54,10 @@ router.put('/documents/update-multiple', uploadController.updateMultipleDocument
 // Add these routes to your existing routes file
 router.get('/ocr-text/:OcrId', uploadController.getOcrText);
 router.put('/ocr-text/:OcrId', uploadController.saveOcrText);
+
+//NER processing 
+
+
+router.post('/perform-ner', aiController.performNER);
 
 module.exports = router;
