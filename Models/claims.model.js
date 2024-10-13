@@ -16,6 +16,11 @@ const DocumentSchema = new mongoose.Schema ({
         type: String, 
         required: false
     },
+    OcrId: {
+        type: Number,
+        required: false, 
+        unique: false,
+    },
     
 });
 
@@ -23,7 +28,7 @@ const DocumentSchema = new mongoose.Schema ({
 const ClaimSchema = new mongoose.Schema({
 
     claimnumber: { type: String,
-    required: true},
+    required: true}, 
 
     name:{ type: String, required: true},
 

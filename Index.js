@@ -31,7 +31,7 @@ app.use(cors());
 
 app.use("/new", ClaimFile);
 app.use('/dms', uploadRoutes);
-app.use('/dms', ocrProcessor)
+// app.use('/dms', ocrProcessor)
 app.use('/ai', uploadRoutes);
 
 app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));

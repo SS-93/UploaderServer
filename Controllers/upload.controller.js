@@ -106,6 +106,7 @@ exports.bulkUploadFilesWithoutClaim = async (req, res) => {
   }
 };
 
+
 exports.getParkedUploads = async (req, res) => {
   try {
     const { parkId } = req.params;

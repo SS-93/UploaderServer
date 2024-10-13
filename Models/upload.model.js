@@ -24,7 +24,8 @@ const UploadSchema = new mongoose.Schema({
   fileUrl: { type: String, required: true },
   mimetype: { type: String, required: true },
   uploadDate: { type: Date, default: Date.now },
-  claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim', required: true },  // claimId is required here
+  claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim', required: false },  // claimId is required here
+  OcrId: { type: Number, required: true, unique: true },
 });
 
 // const OcrTextSchema = new mongoose.Schema({
@@ -48,5 +49,6 @@ const Upload = mongoose.model('Upload', UploadSchema);
 // const OcrText = mongoose.model('OcrText', OcrTextSchema);
 
 module.exports = { Upload, ParkedUpload };
+
 
 

@@ -3,7 +3,7 @@ const { ObjectId } = require('mongodb');
 const multer = require('multer');
 const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 const Claim = require('../Models/claims.model');
-const Upload = require('../Models/upload.model');
+const {Upload} = require('../Models/upload.model');
 
 const router = express.Router();
 
@@ -234,5 +234,4 @@ router.get('/documents/:key/signed-url', async (req, res) => {
 });
 
 module.exports = router;
-
 
