@@ -139,17 +139,27 @@ exports.updateDocumentTextContent = async (req, res) => {
 exports.deleteDocument = async (req, res) => {
   const { OcrId } = req.params;
 
+  if (!OcrId) {
+    return res.status(400).json({ error: 'OcrId is required' });
+  }
+
   try {
-    const document = await ParkedUpload.findOneAndDelete({ OcrId });
+    // Try to delete from ParkedUpload first
+    let document = await ParkedUpload.findOneAndDelete({ OcrId: parseInt(OcrId) });
 
     if (!document) {
-      return res.status(404).json({ message: 'Document not found' });
+      // If not found in ParkedUpload, try to delete from Upload
+      document = await Upload.findOneAndDelete({ OcrId: parseInt(OcrId) });
+    }
+
+    if (!document) {
+      return res.status(404).json({ error: 'Document not found' });
     }
 
     res.status(200).json({ message: 'Document deleted successfully' });
   } catch (err) {
     console.error('Error deleting document:', err);
-    res.status(500).json({ error: 'Failed to delete document' });
+    res.status(500).json({ error: 'Failed to delete document', details: err.message });
   }
 };
 
@@ -341,3 +351,4 @@ exports.getSignedUrl = async (req, res) => {
 
 
 exports.uploadMiddleware = upload.array('documents', 10);
+

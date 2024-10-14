@@ -55,6 +55,9 @@ router.put('/documents/update-multiple', uploadController.updateMultipleDocument
 router.get('/ocr-text/:OcrId', uploadController.getOcrText);
 router.put('/ocr-text/:OcrId', uploadController.saveOcrText);
 
+// delete multiple documents
+router.delete('/documents/delete-multiple', uploadController.deleteDocument);
+
 //NER processing 
 
 
