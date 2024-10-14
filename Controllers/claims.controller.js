@@ -5,6 +5,7 @@ const { uploadFile, getFileStream, getSignedUrl } = require('../S3');
 const Claim = require('../Models/claims.model');
 const {Upload} = require('../Models/upload.model');
 
+
 const router = express.Router();
 
 // Configure multer to use memory storage
@@ -15,6 +16,19 @@ const errorResponse = (res, err) => {
     res.status(500).json({ Error: err.message });
 };
 
+const generateUniqueOcrId = async () => {
+  let isUnique = false;
+  let OcrId;
+  
+  while (!isUnique) {
+    OcrId = Math.floor(1000 + Math.random() * 9000);
+    const existingDocument = await Claim.findOne({ OcrId });
+    if (!existingDocument) {
+      isUnique = true;
+    }
+  }
+  return OcrId;
+};
 // Upload a single file to S3 and link it to a claim
 //! V1
 router.post('/claims/:claimId/documents', upload.single('document'), async (req, res) => {
@@ -74,11 +88,13 @@ router.post('/claims/:claimId/documents/bulk-upload', upload.array('documents'),
 
         const uploadPromises = files.map(async (file, index) => {
             const result = await uploadFile(file);
+            const OcrId = await generateUniqueOcrId(); // Generate unique OcrId
             return {
                 fileName: fileNames[index] || file.originalname,
                 fileUrl: result.Location,
                 category: categories[index] || 'Uncategorized',
                 mimetype: file.mimetype,
+                OcrId: OcrId // Add the OcrId to the document
             };
         });
 
@@ -86,6 +102,18 @@ router.post('/claims/:claimId/documents/bulk-upload', upload.array('documents'),
 
         claim.documents.push(...uploadedDocuments);
         await claim.save();
+
+        // Create Upload documents
+        const uploadDocuments = uploadedDocuments.map(doc => ({
+            fileName: doc.fileName,
+            originalName: doc.fileName,
+            fileUrl: doc.fileUrl,
+            mimetype: doc.mimetype,
+            claimId: claimId,
+            OcrId: doc.OcrId
+        }));
+
+        await Upload.insertMany(uploadDocuments);
 
         res.status(200).json({ message: 'Bulk upload successful', documents: uploadedDocuments });
     } catch (err) {
@@ -239,6 +267,29 @@ router.put('/claims/:claimId/documents', async (req, res) => {
     }
 });
 
+// fetch a document's ocrId
+
+router.get('/claims/:claimId/documents/:documentId/ocrId', async (req, res) => {
+    const { claimId, documentId } = req.params;
+  
+    try {
+      const claim = await Claim.findById(claimId);
+      if (!claim) {
+        return res.status(404).json({ error: 'Claim not found' });
+      }
+  
+      const document = claim.documents.id(documentId);
+      if (!document) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+  
+      res.json({ OcrId: document.OcrId });
+    } catch (err) {
+      console.error('Error fetching OcrId:', err);
+      res.status(500).json({ error: 'Failed to fetch OcrId' });
+    }
+  });
+
 // Delete a document by its ID
 router.delete('/claims/:claimId/documents/:documentId', async (req, res) => {
     const { claimId, documentId } = req.params;
@@ -261,6 +312,38 @@ router.delete('/claims/:claimId/documents/:documentId', async (req, res) => {
     }
 });
 
+// Save OCR text for a document
+router.put('/ocr-text/:OcrId', async (req, res) => {
+    const { OcrId } = req.params;
+    const { text } = req.body;
+  
+    try {
+      // Find the claim containing the document with the given OcrId
+      const claim = await Claim.findOne({ 'documents.OcrId': OcrId });
+  
+      if (!claim) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+  
+      // Find the specific document within the claim
+      const document = claim.documents.find(doc => doc.OcrId == OcrId);
+  
+      if (!document) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
+  
+      // Update the textContent of the document
+      document.textContent = text;
+  
+      // Save the updated claim
+      await claim.save();
+  
+      res.status(200).json({ message: 'OCR text saved successfully' });
+    } catch (err) {
+      console.error('Error saving OCR text:', err);
+      res.status(500).json({ error: 'Failed to save OCR text' });
+    }
+  });
 
 
 // Get signed URL for a file
@@ -274,5 +357,6 @@ router.get('/documents/:key/signed-url', async (req, res) => {
     }
 });
 
-module.exports = router;
 
+
+module.exports = router;
