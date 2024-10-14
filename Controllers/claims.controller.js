@@ -55,6 +55,47 @@ router.post('/claims/:claimId/documents', upload.single('document'), async (req,
     }
 });
 
+// Add this new route handler for bulk upload
+router.post('/claims/:claimId/documents/bulk-upload', upload.array('documents'), async (req, res) => {
+    const { claimId } = req.params;
+    const files = req.files;
+    const fileNames = req.body.fileNames.split(',');
+    const categories = req.body.categories.split(',');
+
+    if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files uploaded' });
+    }
+
+    try {
+        const claim = await Claim.findById(claimId);
+        if (!claim) {
+            return res.status(404).json({ error: 'Claim not found' });
+        }
+
+        const uploadPromises = files.map(async (file, index) => {
+            const result = await uploadFile(file);
+            return {
+                fileName: fileNames[index] || file.originalname,
+                fileUrl: result.Location,
+                category: categories[index] || 'Uncategorized',
+                mimetype: file.mimetype,
+            };
+        });
+
+        const uploadedDocuments = await Promise.all(uploadPromises);
+
+        claim.documents.push(...uploadedDocuments);
+        await claim.save();
+
+        res.status(200).json({ message: 'Bulk upload successful', documents: uploadedDocuments });
+    } catch (err) {
+        console.error('Error during bulk upload:', err);
+        res.status(500).json({ error: 'Failed to process bulk upload' });
+    }
+});
+
+// ... rest of your existing code
+
 // Create a new claim
 router.post('/claims', async (req, res) => {
     try {
