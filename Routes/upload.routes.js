@@ -60,7 +60,13 @@ router.delete('/documents/delete-multiple', uploadController.deleteDocument);
 
 //NER processing 
 
-
+//NER processing 
 router.post('/perform-ner', aiController.performNER);
+
+// New route for saving updated entities
+router.post('/save-entities', aiController.saveUpdatedEntities);
+
+
+
 
 module.exports = router;
