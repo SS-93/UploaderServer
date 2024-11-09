@@ -1,5 +1,4 @@
-const mongoose = require ('mongoose')
-
+const mongoose = require('mongoose');
 
 const DocumentSchema = new mongoose.Schema ({
     fileName: String,
@@ -21,32 +20,44 @@ const DocumentSchema = new mongoose.Schema ({
         required: false, 
         unique: false,
     },
-    
 });
-
 
 const ClaimSchema = new mongoose.Schema({
-
-    claimnumber: { type: String,
-    required: true}, 
-
-    name:{ type: String, required: true},
-
-    date: {type: Date,
-    required: false},
-
-    adjuster: { type: String,
-    required: false},
-    documents: [DocumentSchema],
-    aggregatedText: {
+    claimnumber: {
         type: String,
-        default: '',
+        required: true,
+
     },
-    
-
-
+    name: {
+        type: String,
+        required: true,
+       
+    },
+    date: {
+        type: Date,
+        default: Date.now,
+     
+    },
+    adjuster: {
+        type: String,
+        required: true,
+       
+    },
+    documents: [{
+        fileName: String,
+        fileUrl: String,
+        category: String,
+        OcrId: Number,
+        textContent: String
+    }]
 });
+
+// Add just the indexes
+ClaimSchema.index({ claimnumber: 1 }, { background: true });
+ClaimSchema.index({ name: 1 }, { background: true });
+ClaimSchema.index({ date: -1 }, { background: true });
+ClaimSchema.index({ adjuster: 1 }, { background: true });
+
 const ClaimModel = mongoose.model('ClaimModel', ClaimSchema);
 
-// Export the model
 module.exports = ClaimModel;

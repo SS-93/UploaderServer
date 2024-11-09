@@ -357,6 +357,45 @@ router.get('/documents/:key/signed-url', async (req, res) => {
     }
 });
 
+// Add this new route for the query matrix
+router.get('/matrix/claims', async (req, res) => {
+    try {
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const skip = (page - 1) * limit;
 
+        const [claims, totalCount] = await Promise.all([
+            Claim.find()
+                .select('claimnumber name date adjuster documents')
+                .sort({ date: -1 })
+                .skip(skip)
+                .limit(limit)
+                .lean(),
+            Claim.countDocuments()
+        ]);
+
+        const formattedClaims = claims.map(claim => ({
+            _id: claim._id,
+            claimnumber: claim.claimnumber,
+            name: claim.name,
+            date: claim.date,
+            adjuster: claim.adjuster,
+            documentCount: claim.documents?.length || 0
+        }));
+
+        res.status(200).json({
+            claims: formattedClaims,
+            pagination: {
+                currentPage: page,
+                totalPages: Math.ceil(totalCount / limit),
+                totalItems: totalCount,
+                itemsPerPage: limit
+            }
+        });
+    } catch (err) {
+        console.error('Matrix claims fetch error:', err);
+        res.status(500).json({ error: 'Failed to fetch claims for matrix' });
+    }
+});
 
 module.exports = router;
