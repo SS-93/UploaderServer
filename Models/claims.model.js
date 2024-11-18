@@ -58,6 +58,24 @@ ClaimSchema.index({ name: 1 }, { background: true });
 ClaimSchema.index({ date: -1 }, { background: true });
 ClaimSchema.index({ adjuster: 1 }, { background: true });
 
+// Add text indexes for document content
+ClaimSchema.index({ 
+  'documents.textContent': 'text',
+  'documents.fileName': 'text',
+  claimnumber: 'text',
+  name: 'text',
+  adjuster: 'text'
+}, {
+  weights: {
+    'documents.textContent': 10,
+    'documents.fileName': 5,
+    claimnumber: 3,
+    name: 2,
+    adjuster: 1
+  },
+  name: "TextSearchIndex"
+});
+
 const ClaimModel = mongoose.model('ClaimModel', ClaimSchema);
 
 module.exports = ClaimModel;

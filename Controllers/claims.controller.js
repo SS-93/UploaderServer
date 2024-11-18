@@ -43,11 +43,14 @@ router.post('/claims/:claimId/documents', upload.single('document'), async (req,
     try {
         const result = await uploadFile(file);
         const claim = await Claim.findById(claimId);
+        const OcrId = await generateUniqueOcrId(); // Generate OcrId here
 
         const newDocument = {
             fileName: fileName || file.originalname,
             fileUrl: result.Location,
-            category: category || 'Uncategorized'
+            category: category || 'Uncategorized',
+            OcrId: OcrId, // Add OcrId to document
+            textContent: '' // Initialize empty text content
         };
 
         claim.documents.push(newDocument);
@@ -59,10 +62,15 @@ router.post('/claims/:claimId/documents', upload.single('document'), async (req,
             fileUrl: result.Location,
             mimetype: file.mimetype,
             claimId: claimId,
+            OcrId: OcrId // Add OcrId to upload record
         });
         await newUpload.save();
 
-        res.json(newDocument);
+        // Return the OcrId in the response
+        res.json({
+            ...newDocument,
+            OcrId: OcrId
+        });
     } catch (err) {
         console.error('Error uploading to S3', err);
         res.status(500).json({ error: 'Failed to upload to S3' });
@@ -120,6 +128,78 @@ router.post('/claims/:claimId/documents/bulk-upload', upload.array('documents'),
         console.error('Error during bulk upload:', err);
         res.status(500).json({ error: 'Failed to process bulk upload' });
     }
+});
+
+// Add bulk upload route
+router.post('/claims/:claimId/documents/bulk', upload.array('documents'), async (req, res) => {
+  const { claimId } = req.params;
+  const files = req.files;
+  
+  // Split using | as delimiter instead of comma
+  const fileNames = (req.body.fileNames || '').split('|');
+  const categories = (req.body.categories || '').split('|');
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: 'No files provided' });
+  }
+
+  try {
+    // Find existing claim first
+    const claim = await Claim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+
+    const uploadedDocs = [];
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const result = await uploadFile(file);
+      const OcrId = await generateUniqueOcrId();
+
+      // Ensure we have a valid fileName
+      const fileName = fileNames[i] || file.originalname;
+      if (!fileName) {
+        throw new Error(`Missing filename for file at index ${i}`);
+      }
+
+      const newDocument = {
+        fileName: fileName,
+        fileUrl: result.Location,
+        category: categories[i] || 'Uncategorized',
+        OcrId: OcrId,
+        textContent: ''
+      };
+
+      // Create Upload record first
+      const newUpload = new Upload({
+        filename: result.Key,
+        originalName: fileName, // Use the same fileName
+        fileUrl: result.Location,
+        mimetype: file.mimetype,
+        claimId: claimId,
+        OcrId: OcrId
+      });
+      await newUpload.save();
+
+      uploadedDocs.push(newDocument);
+    }
+
+    // Update claim with all new documents at once
+    const updatedClaim = await Claim.findByIdAndUpdate(
+      claimId,
+      { $push: { documents: { $each: uploadedDocs } } },
+      { new: true, runValidators: false }
+    );
+
+    res.json({
+      message: 'Bulk upload successful',
+      documents: uploadedDocs
+    });
+  } catch (err) {
+    console.error('Bulk upload error:', err);
+    res.status(500).json({ error: err.message || 'Bulk upload failed' });
+  }
 });
 
 // ... rest of your existing code
@@ -312,38 +392,50 @@ router.delete('/claims/:claimId/documents/:documentId', async (req, res) => {
     }
 });
 
-// Save OCR text for a document
+// Update OCR text route
 router.put('/ocr-text/:OcrId', async (req, res) => {
-    const { OcrId } = req.params;
-    const { text } = req.body;
-  
-    try {
-      // Find the claim containing the document with the given OcrId
-      const claim = await Claim.findOne({ 'documents.OcrId': OcrId });
-  
-      if (!claim) {
-        return res.status(404).json({ error: 'Document not found' });
-      }
-  
-      // Find the specific document within the claim
-      const document = claim.documents.find(doc => doc.OcrId == OcrId);
-  
-      if (!document) {
-        return res.status(404).json({ error: 'Document not found' });
-      }
-  
-      // Update the textContent of the document
-      document.textContent = text;
-  
-      // Save the updated claim
-      await claim.save();
-  
-      res.status(200).json({ message: 'OCR text saved successfully' });
-    } catch (err) {
-      console.error('Error saving OCR text:', err);
-      res.status(500).json({ error: 'Failed to save OCR text' });
+  const { OcrId } = req.params;
+  const { text } = req.body;
+
+  if (!OcrId) {
+    return res.status(400).json({ error: 'OcrId is required' });
+  }
+
+  try {
+    // Find the claim containing the document with the given OcrId
+    const claim = await Claim.findOne({ 'documents.OcrId': parseInt(OcrId) });
+    
+    if (!claim) {
+      return res.status(404).json({ error: 'Document not found' });
     }
-  });
+
+    // Update only the textContent of the specific document
+    const result = await Claim.findOneAndUpdate(
+      { 'documents.OcrId': parseInt(OcrId) },
+      { $set: { 'documents.$.textContent': text } },
+      { 
+        new: true,
+        runValidators: false // Disable validation since we're only updating document text
+      }
+    );
+
+    if (!result) {
+      return res.status(404).json({ error: 'Failed to update document text' });
+    }
+
+    // Find the updated document
+    const updatedDoc = result.documents.find(doc => doc.OcrId === parseInt(OcrId));
+
+    res.status(200).json({
+      message: 'OCR text saved successfully',
+      document: updatedDoc
+    });
+
+  } catch (err) {
+    console.error('Error saving OCR text:', err);
+    res.status(500).json({ error: 'Failed to save OCR text' });
+  }
+});
 
 
 // Get signed URL for a file
@@ -396,6 +488,195 @@ router.get('/matrix/claims', async (req, res) => {
         console.error('Matrix claims fetch error:', err);
         res.status(500).json({ error: 'Failed to fetch claims for matrix' });
     }
+});
+
+// Enhanced search endpoint
+router.get('/search', async (req, res) => {
+    try {
+      const { query, page = 1, limit = 10 } = req.query;
+      const skip = (page - 1) * limit;
+  
+      // Parse the search query to check for operators
+      const searchTerms = query.toLowerCase();
+      let searchCriteria = {};
+      
+      if (searchTerms.includes('doc:')) {
+        // Search in document content and entities
+        const docQuery = searchTerms.split('doc:')[1].split(' ')[0];
+        searchCriteria = {
+          $or: [
+            { 'documents.textContent': { $regex: docQuery, $options: 'i' } },
+            { 'documents.entities.potentialClaimantNames': { $regex: docQuery, $options: 'i' } },
+            { 'documents.entities.potentialEmployerNames': { $regex: docQuery, $options: 'i' } },
+            { 'documents.entities.potentialInsurerNames': { $regex: docQuery, $options: 'i' } },
+            { 'documents.entities.potentialMedicalProviderNames': { $regex: docQuery, $options: 'i' } },
+            { 'documents.entities.potentialPhysicianNames': { $regex: docQuery, $options: 'i' } },
+            { 'documents.entities.potentialInjuryDescriptions': { $regex: docQuery, $options: 'i' } }
+          ]
+        };
+      } else if (searchTerms.includes('name:')) {
+        const nameQuery = searchTerms.split('name:')[1].split(' ')[0];
+        searchCriteria = { name: { $regex: nameQuery, $options: 'i' } };
+      } else if (searchTerms.includes('adj:')) {
+        const adjQuery = searchTerms.split('adj:')[1].split(' ')[0];
+        searchCriteria = { adjuster: { $regex: adjQuery, $options: 'i' } };
+      } else if (searchTerms.includes('claim:')) {
+        const claimQuery = searchTerms.split('claim:')[1].split(' ')[0];
+        searchCriteria = { claimnumber: { $regex: claimQuery, $options: 'i' } };
+      } else {
+        // Default search across all fields
+        searchCriteria = {
+          $or: [
+            { claimnumber: { $regex: searchTerms, $options: 'i' } },
+            { name: { $regex: searchTerms, $options: 'i' } },
+            { adjuster: { $regex: searchTerms, $options: 'i' } },
+            { 'documents.textContent': { $regex: searchTerms, $options: 'i' } },
+            { 'documents.entities.potentialClaimantNames': { $regex: searchTerms, $options: 'i' } },
+            { 'documents.entities.potentialInjuryDescriptions': { $regex: searchTerms, $options: 'i' } }
+          ]
+        };
+      }
+  
+      const searchResults = await Claim.aggregate([
+        { $match: searchCriteria },
+        {
+          $addFields: {
+            matchingDocuments: {
+              $filter: {
+                input: '$documents',
+                as: 'doc',
+                cond: {
+                  $or: [
+                    { $regexMatch: { input: '$$doc.textContent', regex: searchTerms, options: 'i' } },
+                    { $regexMatch: { input: { $toString: '$$doc.entities' }, regex: searchTerms, options: 'i' } }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        {
+          $project: {
+            claimnumber: 1,
+            name: 1,
+            date: 1,
+            adjuster: 1,
+            matchingDocuments: 1,
+            documentCount: { $size: '$documents' },
+            matchCount: { $size: '$matchingDocuments' }
+          }
+        },
+        { $skip: skip },
+        { $limit: parseInt(limit) }
+      ]);
+  
+      const total = await Claim.countDocuments(searchCriteria);
+  
+      res.json({
+        results: searchResults,
+        pagination: {
+          total,
+          page: parseInt(page),
+          pages: Math.ceil(total / limit)
+        }
+      });
+  
+    } catch (err) {
+      console.error('Search error:', err);
+      res.status(500).json({ error: 'Search failed' });
+    }
+  });
+
+// Get all documents for a claim
+router.get('/claims/:claimId/documents', async (req, res) => {
+  try {
+    const claim = await Claim.findById(req.params.claimId);
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+    res.json(claim.documents || []);
+  } catch (err) {
+    console.error('Error fetching documents:', err);
+    res.status(500).json({ error: 'Failed to fetch documents' });
+  }
+});
+
+// Document search endpoint
+router.get('/claims/:claimId/documents/search', async (req, res) => {
+  try {
+    const { query } = req.query;
+    const { claimId } = req.params;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Search query is required' });
+    }
+
+    // First, find the specific claim
+    const claim = await Claim.findById(claimId);
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+
+    // Filter documents in memory for the specific claim
+    const matchingDocuments = claim.documents.filter(doc => {
+      const textContent = (doc.textContent || '').toLowerCase();
+      const fileName = (doc.fileName || '').toLowerCase();
+      const category = (doc.category || '').toLowerCase();
+      const searchTerm = query.toLowerCase();
+
+      return textContent.includes(searchTerm) || 
+             fileName.includes(searchTerm) || 
+             category.includes(searchTerm);
+    });
+
+    // Format the results
+    const formattedResults = matchingDocuments.map(doc => {
+      const textContent = doc.textContent || '';
+      const searchIndex = textContent.toLowerCase().indexOf(query.toLowerCase());
+      let snippet = '';
+      let score = 0;
+
+      // Calculate score
+      if (textContent.toLowerCase().includes(query.toLowerCase())) score += 2;
+      if (doc.fileName.toLowerCase().includes(query.toLowerCase())) score += 1;
+      if (doc.category.toLowerCase().includes(query.toLowerCase())) score += 1;
+      
+      // Create snippet if there's a match in textContent
+      if (searchIndex !== -1) {
+        const start = Math.max(0, searchIndex - 50);
+        const end = Math.min(textContent.length, searchIndex + query.length + 50);
+        snippet = textContent.slice(start, end);
+      }
+
+      return {
+        _id: doc._id,
+        fileName: doc.fileName,
+        fileUrl: doc.fileUrl,
+        category: doc.category,
+        OcrId: doc.OcrId,
+        matchDetails: {
+          score,
+          textMatches: snippet ? [{
+            snippet,
+            query
+          }] : []
+        }
+      };
+    });
+
+    // Sort by score
+    formattedResults.sort((a, b) => b.matchDetails.score - a.matchDetails.score);
+
+    res.json({
+      results: formattedResults,
+      total: formattedResults.length,
+      searchTerm: query
+    });
+
+  } catch (err) {
+    console.error('Document search error:', err);
+    res.status(500).json({ error: 'Search failed' });
+  }
 });
 
 module.exports = router;
