@@ -221,24 +221,74 @@ exports.sortDocumentToClaim = async (req, res) => {
 };
 
 exports.saveOcrText = async (req, res) => {
-  const { OcrId } = req.params;
-  const { ocrTextContent } = req.body;
-
   try {
-    const document = await ParkedUpload.findOneAndUpdate(
-      { OcrId },
-      { textContent: ocrTextContent },
+    const { OcrId } = req.params;
+    const { text } = req.body;
+
+    // Ensure OcrId is a number
+    const numericOcrId = parseInt(OcrId, 10);
+    if (isNaN(numericOcrId)) {
+      return res.status(400).json({ error: 'Invalid OcrId format' });
+    }
+
+    let updatedDocument = null;
+    let documentFound = false;
+
+    // First try ParkedUpload collection
+    const parkedDoc = await ParkedUpload.findOneAndUpdate(
+      { OcrId: numericOcrId },
+      { $set: { textContent: text } },
       { new: true }
     );
 
-    if (!document) {
-      return res.status(404).json({ error: 'Document not found' });
+    if (parkedDoc) {
+      documentFound = true;
+      updatedDocument = parkedDoc;
+    } else {
+      // If not in ParkedUpload, try Claims collection
+      const claim = await Claim.findOneAndUpdate(
+        { 'documents.OcrId': numericOcrId },
+        { $set: { 'documents.$.textContent': text } },
+        { new: true }
+      );
+
+      if (claim) {
+        documentFound = true;
+        updatedDocument = claim.documents.find(doc => doc.OcrId === numericOcrId);
+      }
     }
 
-    res.status(200).json({ message: 'OCR text content saved successfully', document });
+    // If document wasn't found in either collection, try to create it in ParkedUpload
+    if (!documentFound) {
+      const newParkedDoc = new ParkedUpload({
+        OcrId: numericOcrId,
+        textContent: text,
+        fileName: 'Untitled Document',
+        category: 'Uncategorized'
+      });
+      updatedDocument = await newParkedDoc.save();
+      documentFound = true;
+    }
+
+    if (!documentFound) {
+      return res.status(404).json({ error: 'Document not found and could not be created' });
+    }
+
+    // Return standardized response
+    res.json({
+      message: 'OCR text saved successfully',
+      document: {
+        OcrId: updatedDocument.OcrId,
+        textContent: updatedDocument.textContent,
+        fileName: updatedDocument.fileName || 'Untitled Document',
+        category: updatedDocument.category || 'Uncategorized',
+        uploadDate: updatedDocument.uploadDate || new Date()
+      }
+    });
+
   } catch (err) {
-    console.error('Error saving OCR text content:', err);
-    res.status(500).json({ error: 'Failed to save OCR text content' });
+    console.error('Error saving OCR text:', err);
+    res.status(500).json({ error: 'Failed to save OCR text' });
   }
 };
 
@@ -283,39 +333,44 @@ exports.updateDocumentDetails = async (req, res) => {
 
 // Add this new function to your existing controller
 exports.getOcrText = async (req, res) => {
-  const { OcrId } = req.params;
   try {
-    const document = await ParkedUpload.findOne({ OcrId });
+    const { OcrId } = req.params;
+    
+    // Ensure OcrId is a number
+    const numericOcrId = parseInt(OcrId, 10);
+    if (isNaN(numericOcrId)) {
+      return res.status(400).json({ error: 'Invalid OcrId format' });
+    }
+
+    let document = null;
+
+    // First check ParkedUpload collection
+    document = await ParkedUpload.findOne({ OcrId: numericOcrId });
+
+    // If not found, check Claims collection
+    if (!document) {
+      const claim = await Claim.findOne({ 'documents.OcrId': numericOcrId });
+      if (claim) {
+        document = claim.documents.find(doc => doc.OcrId === numericOcrId);
+      }
+    }
+
     if (!document) {
       return res.status(404).json({ error: 'Document not found' });
     }
-    res.status(200).json({ textContent: document.textContent || '' });
+
+    // Return standardized response
+    res.json({
+      textContent: document.textContent || '',
+      fileName: document.fileName || 'Untitled Document',
+      category: document.category || 'Uncategorized',
+      OcrId: document.OcrId,
+      uploadDate: document.uploadDate || new Date()
+    });
+
   } catch (err) {
     console.error('Error fetching OCR text:', err);
     res.status(500).json({ error: 'Failed to fetch OCR text' });
-  }
-};
-
-// Update the existing saveOcrText function if it doesn't match this implementation
-exports.saveOcrText = async (req, res) => {
-  const { OcrId } = req.params;
-  const { ocrTextContent } = req.body;
-
-  try {
-    const document = await ParkedUpload.findOneAndUpdate(
-      { OcrId },
-      { textContent: ocrTextContent },
-      { new: true }
-    );
-
-    if (!document) {
-      return res.status(404).json({ error: 'Document not found' });
-    }
-
-    res.status(200).json({ message: 'OCR text content saved successfully', document });
-  } catch (err) {
-    console.error('Error saving OCR text content:', err);
-    res.status(500).json({ error: 'Failed to save OCR text content' });
   }
 };
 
@@ -351,4 +406,5 @@ exports.getSignedUrl = async (req, res) => {
 
 
 exports.uploadMiddleware = upload.array('documents', 10);
+
 
