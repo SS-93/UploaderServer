@@ -212,6 +212,10 @@ router.post('/claims', async (req, res) => {
             name: req.body.name,
             date: req.body.date,
             adjuster: req.body.adjuster,
+            phoneNumber: req.body.phoneNumber,
+            employerName: req.body.employerName,
+            physicianName: req.body.physicianName,
+            injuryDescription: req.body.injuryDescription
         };
 
         const claim = new Claim(claimFile);
@@ -561,6 +565,7 @@ router.get('/search', async (req, res) => {
             name: 1,
             date: 1,
             adjuster: 1,
+            phoneNumber: 1,
             matchingDocuments: 1,
             documentCount: { $size: '$documents' },
             matchCount: { $size: '$matchingDocuments' }

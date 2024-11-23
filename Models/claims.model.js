@@ -64,7 +64,11 @@ const ClaimSchema = new mongoose.Schema({
     },
     adjuster: {
         type: String,
-        required: true,
+        required: false,
+    },
+    phoneNumber: {
+        type: String,
+        default: '',
     },
     employerName: {
         type: String,
@@ -105,6 +109,7 @@ ClaimSchema.index({
     claimnumber: 'text',
     name: 'text',
     adjuster: 'text',
+    phoneNumber: 'text',
     employerName: 'text',
     injuryDescription: 'text',
     physicianName: 'text'
@@ -115,6 +120,7 @@ ClaimSchema.index({
         claimnumber: 3,
         name: 2,
         adjuster: 1,
+        phoneNumber: 2,
         employerName: 2,
         injuryDescription: 4,
         physicianName: 1
