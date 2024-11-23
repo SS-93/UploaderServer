@@ -81,6 +81,10 @@ const ClaimSchema = new mongoose.Schema({
     physicianName: {
         type: String,
         default: '',
+    }, 
+    dateOfBirth: {
+        type: Date,
+        required: false,
     },
     documents: [{
         fileName: String,
@@ -112,7 +116,8 @@ ClaimSchema.index({
     phoneNumber: 'text',
     employerName: 'text',
     injuryDescription: 'text',
-    physicianName: 'text'
+    physicianName: 'text',
+    dateOfBirth: 'text'
 }, {
     weights: {
         'documents.textContent': 10,
@@ -123,7 +128,8 @@ ClaimSchema.index({
         phoneNumber: 2,
         employerName: 2,
         injuryDescription: 4,
-        physicianName: 1
+        physicianName: 1,
+        dateOfBirth: 1
     },
     name: "TextSearchIndex"
 });
