@@ -9,12 +9,13 @@ const ClaimFile = require("./Controllers/claims.controller");
 const uploadRoutes = require("./Routes/upload.routes");
 const ocrProcessor = require ('./Routes/ocr.routes')
 // const OcrProcessor = require('./ocrProcessor')
-
+const aiRoutes = require('./Routes/ai.routes')
 
 const { uploadFile, getFileStream, getSignedUrl } = require('./S3');
 
 const app = express(); 
 const { PORT, MONGO } = process.env;
+
 
 mongoose.connect(`${MONGO}/UploaderServer`, {
     useNewUrlParser: true,
@@ -33,6 +34,7 @@ app.use("/new", ClaimFile);
 app.use('/dms', uploadRoutes);
 // app.use('/dms', ocrProcessor)
 app.use('/ai', uploadRoutes);
+app.use('/ai', aiRoutes)
 
 app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
 

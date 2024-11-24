@@ -266,3 +266,77 @@ exports.saveUpdatedEntities = async (req, res) => {
         res.status(500).json({ error: 'Failed to save updated entities' });
     }
 };
+
+exports.findMatches = async (req, res) => {
+    try {
+        const { entities } = req.body;
+        console.log('Processing match request for entities:', entities);
+
+        if (!entities) {
+            return res.status(400).json({ error: 'No entities provided' });
+        }
+
+        // Get all claims from database
+        const claims = await ClaimModel.find({});
+        console.log(`Processing ${claims.length} claims for matching`);
+
+        // Use existing calculateMatchScore function
+        const matchResults = claims
+            .map(claim => calculateMatchScore(entities, claim))
+            .filter(result => result.isRecommended)
+            .sort((a, b) => b.score - a.score);
+
+        console.log('Match results:', {
+            totalMatches: matchResults.length,
+            topScore: matchResults[0]?.score
+        });
+
+        res.json({ matchResults });
+    } catch (error) {
+        console.error('Error in findMatches:', error);
+        res.status(500).json({ error: 'Failed to process matches' });
+    }
+};
+
+exports.getSuggestedClaimsById = async (req, res) => {
+    try {
+        const { OcrId } = req.params;
+        console.log('Fetching suggested claims for OcrId:', OcrId);
+
+        // Find the document with this OcrId
+        const document = await Upload.findOne({ OcrId: parseInt(OcrId) });
+        if (!document) {
+            return res.status(404).json({ error: 'Document not found' });
+        }
+
+        // Get the document's entities
+        const entities = document.entities || {};
+        console.log('Document entities:', entities);
+
+        // Get all claims
+        const claims = await ClaimModel.find();
+        console.log(`Processing ${claims.length} claims for matching`);
+
+        // Calculate match scores using the existing calculateMatchScore function
+        const matchResults = claims
+            .map(claim => ({
+                ...calculateMatchScore(entities, claim),
+                claim: {
+                    id: claim._id,
+                    claimNumber: claim.claimnumber,
+                    name: claim.name,
+                    employerName: claim.employerName,
+                    dateOfInjury: claim.date
+                }
+            }))
+            .filter(result => result.score >= 40)
+            .sort((a, b) => b.score - a.score);
+
+        console.log(`Found ${matchResults.length} potential matches`);
+        
+        res.json({ matchResults });
+    } catch (error) {
+        console.error('Error in suggested-claims:', error);
+        res.status(500).json({ error: 'Failed to fetch suggested claims' });
+    }
+};
