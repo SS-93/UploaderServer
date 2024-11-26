@@ -1,3 +1,6 @@
+const fetch = require('node-fetch');
+const ClaimModel = require('./Models/claims.model');
+
 class ClaimIndexer {
     constructor() {
       this.claimIndex = new Map();
@@ -6,14 +9,13 @@ class ClaimIndexer {
     async initialize() {
         try {
             console.log('Initializing ClaimIndexer...');
-            const response = await fetch('http://localhost:4000/new/list');
+            const response = await fetch('http://localhost:4000/claims/list'); // Corrected Endpoint
             
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
 
-            const data = await response.json();
-            const claims = data.getAllClaims || [];
+            const claims = await response.json(); // Assuming response.json() returns an array of claims
             
             // Index the claims
             this.indexClaims(claims);
@@ -31,7 +33,7 @@ class ClaimIndexer {
         this.claimIndex.set(claim._id, {
           claimNumber: claim.claimnumber,
           name: claim.name,
-          dateOfInjury: claim.date,
+          dateOfInjury: claim.dateOfInjury, // Corrected Field Name
           adjuster: claim.adjuster,
           employerName: claim.employerName,
           physicianName: claim.physicianName,
@@ -89,7 +91,7 @@ class ClaimIndexer {
 
         return score;
     }
-  }
-  
-  export const claimIndexer = new ClaimIndexer();
-  export default claimIndexer;
+}
+
+const claimIndexer = new ClaimIndexer();
+module.exports = claimIndexer;

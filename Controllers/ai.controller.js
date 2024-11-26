@@ -3,6 +3,8 @@ const natural = require('natural');
 const { ParkedUpload, Upload } = require('../Models/upload.model');
 const ClaimModel = require('../Models/claims.model');
 const { JaroWinklerDistance } = natural;
+const MatchingLogic = require('../Utils/MatchingLogic'); // Ensure proper import
+
 
 const openai = new OpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -267,6 +269,38 @@ exports.saveUpdatedEntities = async (req, res) => {
     }
 };
 
+// exports.findMatches = async (req, res) => {
+//     try {
+//         const { entities } = req.body;
+//         console.log('Processing match request for entities:', entities);
+
+//         if (!entities) {
+//             return res.status(400).json({ error: 'No entities provided' });
+//         }
+
+//         // Get all claims from database
+//         const claims = await ClaimModel.find({});
+//         console.log(`Processing ${claims.length} claims for matching`);
+
+//         // Use existing calculateMatchScore function
+//         const matchResults = claims
+//             .map(claim => calculateMatchScore(entities, claim))
+//             .filter(result => result.isRecommended)
+//             .sort((a, b) => b.score - a.score);
+
+//         console.log('Match results:', {
+//             totalMatches: matchResults.length,
+//             topScore: matchResults[0]?.score
+//         });
+
+//         res.json({ matchResults });
+//     } catch (error) {
+//         console.error('Error in findMatches:', error);
+//         res.status(500).json({ error: 'Failed to process matches' });
+//     }
+// };
+
+
 exports.findMatches = async (req, res) => {
     try {
         const { entities } = req.body;
@@ -276,28 +310,17 @@ exports.findMatches = async (req, res) => {
             return res.status(400).json({ error: 'No entities provided' });
         }
 
-        // Get all claims from database
-        const claims = await ClaimModel.find({});
-        console.log(`Processing ${claims.length} claims for matching`);
+        // Use MatchingLogic to find matches
+        const { totalMatches, topScore, matches } = await MatchingLogic.findMatchingClaims(entities);
 
-        // Use existing calculateMatchScore function
-        const matchResults = claims
-            .map(claim => calculateMatchScore(entities, claim))
-            .filter(result => result.isRecommended)
-            .sort((a, b) => b.score - a.score);
+        console.log('Match results:', { totalMatches, topScore });
 
-        console.log('Match results:', {
-            totalMatches: matchResults.length,
-            topScore: matchResults[0]?.score
-        });
-
-        res.json({ matchResults });
+        res.json({ totalMatches, topScore, matchResults: matches });
     } catch (error) {
         console.error('Error in findMatches:', error);
         res.status(500).json({ error: 'Failed to process matches' });
     }
 };
-
 exports.getSuggestedClaimsById = async (req, res) => {
     try {
         const { OcrId } = req.params;
@@ -340,3 +363,4 @@ exports.getSuggestedClaimsById = async (req, res) => {
         res.status(500).json({ error: 'Failed to fetch suggested claims' });
     }
 };
+
