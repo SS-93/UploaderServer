@@ -4,6 +4,7 @@ const { ParkedUpload, Upload } = require('../Models/upload.model');
 const ClaimModel = require('../Models/claims.model');
 const { JaroWinklerDistance } = natural;
 const MatchingLogic = require('../Utils/MatchingLogic'); // Ensure proper import
+const matchHistoryController = require('../Controllers/matchHistory.controller');
 
 
 const openai = new OpenAI({
@@ -303,7 +304,8 @@ exports.saveUpdatedEntities = async (req, res) => {
 
 exports.findMatches = async (req, res) => {
     try {
-        const { entities } = req.body;
+        const { entities, OcrId } = req.body;
+        
         console.log('Processing match request for entities:', entities);
 
         if (!entities) {
@@ -315,7 +317,16 @@ exports.findMatches = async (req, res) => {
 
         console.log('Match results:', { totalMatches, topScore });
 
-        res.json({ totalMatches, topScore, matchResults: matches });
+        // Save match history if OcrId is provided
+        if (OcrId) {
+            await matchHistoryController.saveMatchHistory(req, res);
+        }
+
+        res.json({
+            totalMatches,
+            topScore,
+            matchResults: matches
+        });
     } catch (error) {
         console.error('Error in findMatches:', error);
         res.status(500).json({ error: 'Failed to process matches' });

@@ -10,6 +10,9 @@ const uploadRoutes = require("./Routes/upload.routes");
 const ocrProcessor = require ('./Routes/ocr.routes')
 // const OcrProcessor = require('./ocrProcessor')
 const aiRoutes = require('./Routes/ai.routes')
+const matchHistoryController = require('./Controllers/matchHistory.controller');
+
+const MatchRoutes = require('./Routes/matchHistory.routes');
 
 const { uploadFile, getFileStream, getSignedUrl } = require('./S3');
 
@@ -35,6 +38,7 @@ app.use('/dms', uploadRoutes);
 // app.use('/dms', ocrProcessor)
 app.use('/ai', uploadRoutes);
 app.use('/ai', aiRoutes)
+app.use('/ai', MatchRoutes)
 
 app.listen(PORT, () => console.log(`App is listening on port ${PORT}`));
 
