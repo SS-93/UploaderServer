@@ -7,10 +7,11 @@ const aiController = require('../Controllers/ai.controller');
 router.post('/ner', aiController.performNER);
 router.post('/save-entities', aiController.saveUpdatedEntities);
 
-// Add the new match-claims route
-router.post('/match-claims', aiController.findMatches);
+// Update the route to match the frontend request
+router.post('/process-matches', aiController.findMatches);
 
 // Add the new suggested-claims route
 router.get('/suggested-claims/:OcrId', aiController.getSuggestedClaimsById);
+router.post('/match-claims', aiController.findMatches);
 
 module.exports = router;

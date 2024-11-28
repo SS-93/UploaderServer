@@ -304,29 +304,55 @@ exports.saveUpdatedEntities = async (req, res) => {
 
 exports.findMatches = async (req, res) => {
     try {
-        const { entities, OcrId } = req.body;
-        
+        const { entities } = req.body;
         console.log('Processing match request for entities:', entities);
 
-        if (!entities) {
-            return res.status(400).json({ error: 'No entities provided' });
-        }
+        // Get all claims
+        const claims = await ClaimModel.find();
+        console.log(`Processing ${claims.length} claims for matching`);
 
-        // Use MatchingLogic to find matches
-        const { totalMatches, topScore, matches } = await MatchingLogic.findMatchingClaims(entities);
+        // Calculate match scores for each claim
+        const matchResults = claims.map(claim => {
+            console.log('Starting match calculation for:', {
+                claimNumber: claim.claimnumber,
+                documentEntities: JSON.stringify(entities, null, 2)
+            });
 
-        console.log('Match results:', { totalMatches, topScore });
+            const result = calculateMatchScore(entities, claim);
+            
+            // Log detailed comparison results
+            console.log('Match calculation complete:', {
+                claimNumber: claim.claimnumber,
+                totalScore: result.score,
+                matchedFields: result.matchedFields,
+                isRecommended: result.score >= 40
+            });
 
-        // Save match history if OcrId is provided
-        if (OcrId) {
-            await matchHistoryController.saveMatchHistory(req, res);
-        }
+            return {
+                ...result,
+                claim: {
+                    id: claim._id,
+                    claimNumber: claim.claimnumber,
+                    name: claim.name,
+                    employerName: claim.employerName,
+                    dateOfInjury: claim.date,
+                    physicianName: claim.physicianName,
+                    injuryDescription: claim.injuryDescription
+                }
+            };
+        })
+        .filter(result => result.score >= 40)
+        .sort((a, b) => b.score - a.score);
 
-        res.json({
-            totalMatches,
-            topScore,
-            matchResults: matches
-        });
+        const response = {
+            totalMatches: matchResults.length,
+            topScore: matchResults.length > 0 ? matchResults[0].score : 0,
+            matchResults
+        };
+
+        console.log('Match results:', response);
+        res.json(response);
+
     } catch (error) {
         console.error('Error in findMatches:', error);
         res.status(500).json({ error: 'Failed to process matches' });
