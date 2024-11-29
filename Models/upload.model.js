@@ -95,7 +95,15 @@ const UploadSchema = new mongoose.Schema({
         score: Number,
         claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim' },
         matchedAt: Date
-    }
+    },
+    sortingHistory: [{
+        attemptedAt: { type: Date, default: Date.now },
+        success: Boolean,
+        method: { type: String, enum: ['auto', 'manual'] },
+        targetClaimId: mongoose.Schema.Types.ObjectId,
+        score: Number,
+        error: String
+    }]
 });
 
 // 6. Create models after all schemas are defined

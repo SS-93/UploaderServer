@@ -401,3 +401,53 @@ exports.getSuggestedClaimsById = async (req, res) => {
     }
 };
 
+// Add batch processing endpoint
+exports.autoSortBatch = async (req, res) => {
+  const { documents, minScore } = req.body;
+  
+  try {
+    const results = {
+      success: [],
+      failed: []
+    };
+
+    // Process in smaller chunks to avoid overwhelming the system
+    const chunkSize = 5;
+    for (let i = 0; i < documents.length; i += chunkSize) {
+      const chunk = documents.slice(i, i + chunkSize);
+      
+      // Process chunk in parallel
+      const chunkResults = await Promise.allSettled(
+        chunk.map(OcrId => 
+          this.sortDocumentToClaim({
+            params: { OcrId },
+            body: { autoSort: true, minScore }
+          }, { json: () => {}, status: () => ({ json: () => {} }) })
+        )
+      );
+
+      // Collect results
+      chunkResults.forEach((result, index) => {
+        const OcrId = chunk[index];
+        if (result.status === 'fulfilled') {
+          results.success.push(OcrId);
+        } else {
+          results.failed.push({
+            OcrId,
+            error: result.reason.message
+          });
+        }
+      });
+    }
+
+    res.json({
+      message: `Processed ${documents.length} documents`,
+      results
+    });
+
+  } catch (error) {
+    console.error('Batch sort error:', error);
+    res.status(500).json({ error: 'Failed to process batch' });
+  }
+};
+
