@@ -14,4 +14,9 @@ router.post('/process-matches', aiController.findMatches);
 router.get('/suggested-claims/:OcrId', aiController.getSuggestedClaimsById);
 router.post('/match-claims', aiController.findMatches);
 
+// Add new batch processing route
+router.post('/auto-sort-batch', aiController.autoSortBatch);
+router.get('/batch-status/:batchId', aiController.getBatchStatus); // For checking batch progress
+
+
 module.exports = router;

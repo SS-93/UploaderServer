@@ -219,7 +219,7 @@ exports.getSuggestedClaims = async (req, res) => {
 
 // Keep existing saveUpdatedEntities export
 exports.saveUpdatedEntities = async (req, res) => {
-    const { OcrId, updatedEntities } = req.body;
+    const { OcrId, updatedEntities, documents } = req.body;
     console.log('Received OcrId:', OcrId);
     console.log('Received entities:', updatedEntities);
 
@@ -262,12 +262,23 @@ exports.saveUpdatedEntities = async (req, res) => {
         if (!document) {
             return res.status(404).json({ error: 'Document not found' });
         }
+        
+        const updatePromises = documents.map(async ({ OcrId, entities }) => {
+            const document = await ParkedUpload.findOne({ OcrId });
+            if (!document) throw new Error('Document not found');
 
-        res.json({ message: 'Entities updated successfully', document });
+            document.entities = entities;
+            await document.save();
+        });
+
+        await Promise.all(updatePromises);
+
+        res.json({ message: 'Entities saved successfully' });
     } catch (error) {
-        console.error('Error saving updated entities:', error);
-        res.status(500).json({ error: 'Failed to save updated entities' });
+        console.error('Error saving entities:', error);
+        res.status(500).json({ error: 'Failed to save entities' });
     }
+    
 };
 
 // exports.findMatches = async (req, res) => {
@@ -401,53 +412,130 @@ exports.getSuggestedClaimsById = async (req, res) => {
     }
 };
 
-// Add batch processing endpoint
+// Batch processing tracking
+const batchProcessingStatus = new Map();
+
 exports.autoSortBatch = async (req, res) => {
-  const { documents, minScore } = req.body;
-  
-  try {
-    const results = {
-      success: [],
-      failed: []
-    };
+    const { documents, minScore = 75 } = req.body;
+    const batchId = Date.now().toString();
+    
+    try {
+        // Initialize batch status
+        batchProcessingStatus.set(batchId, {
+            total: documents.length,
+            processed: 0,
+            success: [],
+            failed: [],
+            inProgress: true,
+            startTime: new Date()
+        });
 
-    // Process in smaller chunks to avoid overwhelming the system
-    const chunkSize = 5;
-    for (let i = 0; i < documents.length; i += chunkSize) {
-      const chunk = documents.slice(i, i + chunkSize);
-      
-      // Process chunk in parallel
-      const chunkResults = await Promise.allSettled(
-        chunk.map(OcrId => 
-          this.sortDocumentToClaim({
-            params: { OcrId },
-            body: { autoSort: true, minScore }
-          }, { json: () => {}, status: () => ({ json: () => {} }) })
-        )
-      );
+        // Process in smaller chunks to avoid overwhelming the system
+        const chunkSize = 5;
+        for (let i = 0; i < documents.length; i += chunkSize) {
+            const chunk = documents.slice(i, i + chunkSize);
+            
+            // Process chunk in parallel
+            const chunkResults = await Promise.allSettled(
+                chunk.map(async (OcrId) => {
+                    try {
+                        // Get document entities
+                        const document = await ParkedUpload.findOne({ OcrId });
+                        if (!document || !document.entities) {
+                            throw new Error('Document or entities not found');
+                        }
 
-      // Collect results
-      chunkResults.forEach((result, index) => {
-        const OcrId = chunk[index];
-        if (result.status === 'fulfilled') {
-          results.success.push(OcrId);
-        } else {
-          results.failed.push({
-            OcrId,
-            error: result.reason.message
-          });
+                        // Find matches
+                        const matches = await MatchingLogic.findMatchingClaims(document.entities);
+                        
+                        // Filter matches based on minScore
+                        const validMatches = matches.matchResults.filter(match => match.score >= minScore);
+
+                        // Update batch status
+                        const currentStatus = batchProcessingStatus.get(batchId);
+                        currentStatus.processed++;
+                        
+                        if (validMatches.length > 0) {
+                            // Save match history
+                            await matchHistoryController.saveMatchHistory({
+                                OcrId,
+                                matches: validMatches,
+                                score: matches.topScore,
+                                timestamp: new Date()
+                            });
+                            
+                            currentStatus.success.push({
+                                OcrId,
+                                topScore: matches.topScore,
+                                matchCount: validMatches.length
+                            });
+                        } else {
+                            currentStatus.failed.push({
+                                OcrId,
+                                reason: 'No matches above minimum score'
+                            });
+                        }
+                        
+                        batchProcessingStatus.set(batchId, currentStatus);
+                        return { OcrId, success: true };
+                    } catch (error) {
+                        console.error(`Error processing document ${OcrId}:`, error);
+                        throw error;
+                    }
+                })
+            );
+
+            // Update batch status with chunk results
+            const status = batchProcessingStatus.get(batchId);
+            chunkResults.forEach((result, index) => {
+                if (result.status === 'rejected') {
+                    status.failed.push({
+                        OcrId: chunk[index],
+                        error: result.reason.message
+                    });
+                }
+            });
+            batchProcessingStatus.set(batchId, status);
         }
-      });
+
+        // Finalize batch status
+        const finalStatus = batchProcessingStatus.get(batchId);
+        finalStatus.inProgress = false;
+        finalStatus.endTime = new Date();
+        batchProcessingStatus.set(batchId, finalStatus);
+
+        // Return results
+        res.json({
+            batchId,
+            message: `Processed ${documents.length} documents`,
+            results: {
+                success: finalStatus.success,
+                failed: finalStatus.failed,
+                totalProcessed: finalStatus.processed
+            }
+        });
+
+    } catch (error) {
+        console.error('Batch sort error:', error);
+        const status = batchProcessingStatus.get(batchId);
+        if (status) {
+            status.inProgress = false;
+            status.error = error.message;
+            batchProcessingStatus.set(batchId, status);
+        }
+        res.status(500).json({ error: 'Failed to process batch', details: error.message });
     }
+};
 
-    res.json({
-      message: `Processed ${documents.length} documents`,
-      results
-    });
-
-  } catch (error) {
-    console.error('Batch sort error:', error);
-    res.status(500).json({ error: 'Failed to process batch' });
-  }
+// Add endpoint to check batch status
+exports.getBatchStatus = async (req, res) => {
+    const { batchId } = req.params;
+    const status = batchProcessingStatus.get(batchId);
+    
+    if (!status) {
+        return res.status(404).json({ error: 'Batch not found' });
+    }
+    
+    res.json(status);
 };
 
