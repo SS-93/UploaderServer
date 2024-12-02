@@ -2,20 +2,23 @@ const { Upload, ParkedUpload } = require('../Models/upload.model');
 
 exports.saveMatchHistory = async (req, res) => {
     try {
-        const { OcrId, matchResults } = req.body;
+        const { OcrId, matchResults, documentMetadata } = req.body;
         
         if (!OcrId || !matchResults) {
             return res.status(400).json({ 
-                message: 'Missing required fields' 
+                message: 'Missing required fields: OcrId and matchResults are required' 
             });
         }
 
-        // Find the upload document by OcrId
-        const upload = await Upload.findOne({ OcrId }) || await ParkedUpload.findOne({ OcrId });
+        // Find or create the upload document
+        let upload = await Upload.findOne({ OcrId }) || await ParkedUpload.findOne({ OcrId });
         
         if (!upload) {
-            return res.status(404).json({
-                message: 'Document not found'
+            // Create new document with minimal metadata
+            upload = new Upload({
+                OcrId,
+                fileName: documentMetadata?.fileName || 'Unnamed Document',
+                category: documentMetadata?.category || 'Uncategorized'
             });
         }
 
@@ -24,13 +27,7 @@ exports.saveMatchHistory = async (req, res) => {
             score: matchResults.topScore || 0,
             matchedAt: new Date(),
             matchedFields: matchResults.recommendedMatches?.[0]?.matchedFields || [],
-            confidence: {
-                claimNumber: matchResults.recommendedMatches?.[0]?.confidence?.claimNumber || 0,
-                name: matchResults.recommendedMatches?.[0]?.confidence?.name || 0,
-                employerName: matchResults.recommendedMatches?.[0]?.confidence?.employerName || 0,
-                dateOfInjury: matchResults.recommendedMatches?.[0]?.confidence?.dateOfInjury || 0,
-                physicianName: matchResults.recommendedMatches?.[0]?.confidence?.physicianName || 0
-            },
+            confidence: matchResults.recommendedMatches?.[0]?.confidence || {},
             matchDetails: matchResults.recommendedMatches?.[0]?.matchDetails || {},
             isRecommended: matchResults.recommendedMatches?.[0]?.isRecommended || false,
             claimId: matchResults.recommendedMatches?.[0]?.claimId || null
@@ -39,12 +36,13 @@ exports.saveMatchHistory = async (req, res) => {
         // Add to match history array
         upload.matchHistory.push(newMatchEntry);
 
-        // Update best match if this is a better score
+        // Update best match if applicable
         if (!upload.bestMatch || newMatchEntry.score > upload.bestMatch.score) {
             upload.bestMatch = {
                 score: newMatchEntry.score,
                 claimId: newMatchEntry.claimId,
-                matchedAt: newMatchEntry.matchedAt
+                matchedAt: newMatchEntry.matchedAt,
+                matchDetails: newMatchEntry.matchDetails
             };
         }
 

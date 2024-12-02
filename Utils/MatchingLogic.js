@@ -98,38 +98,94 @@ const computeCosineSimilarity = (tfidf, doc1Index, doc2Index) => {
 const calculateMatchScore = (documentEntities, claim) => {
     let totalScore = 0;
     const matchedFields = [];
+    const matchDetails = {};
 
-    // Claim Number comparison
-    const claimNumberResult = compareClaimNumbers(documentEntities.potentialClaimNumbers, claim.claimnumber);
-    console.log('Claim Number comparison:', claimNumberResult);
-    if (claimNumberResult.matched) {
-        totalScore += SCORE_WEIGHTS.CLAIM_NUMBER;
-        matchedFields.push('Claim Number');
+    // Parse the documentEntities if it's a string
+    const entities = typeof documentEntities === 'string' ? 
+        JSON.parse(documentEntities) : documentEntities;
+
+    // Claim Number Matching (30 points)
+    if (entities.potentialClaimNumbers?.length > 0) {
+        const normalizedClaimNumber = claim.claimnumber.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const hasClaimMatch = entities.potentialClaimNumbers.some(docNum => {
+            const normalizedDocNum = docNum.toLowerCase().replace(/[^a-z0-9]/g, '');
+            return normalizedDocNum === normalizedClaimNumber;
+        });
+        
+        if (hasClaimMatch) {
+            totalScore += SCORE_WEIGHTS.CLAIM_NUMBER;
+            matchedFields.push('claimNumber');
+            matchDetails.claimNumber = { matched: true, score: SCORE_WEIGHTS.CLAIM_NUMBER };
+        }
     }
 
-    // Name comparison
-    const nameResult = compareNames(documentEntities.potentialClaimantNames, claim.name);
-    console.log('Name comparison:', nameResult);
-    if (nameResult.matched) {
-        totalScore += SCORE_WEIGHTS.NAME;
-        matchedFields.push('Name');
+    // Claimant Name Matching (30 points)
+    if (entities.potentialClaimantNames?.length > 0 && claim.name) {
+        const normalizedClaimName = claim.name.toLowerCase();
+        const hasNameMatch = entities.potentialClaimantNames.some(name => 
+            JaroWinklerDistance(normalizedClaimName, name.toLowerCase()) > 0.8
+        );
+        
+        if (hasNameMatch) {
+            totalScore += SCORE_WEIGHTS.NAME;
+            matchedFields.push('name');
+            matchDetails.name = { matched: true, score: SCORE_WEIGHTS.NAME };
+        }
     }
 
-    // Add similar logging for other comparisons
-    // ... existing comparison logic ...
+    // Date of Injury Matching (20 points)
+    if (entities.potentialDatesOfInjury?.length > 0 && claim.dateOfInjury) {
+        const claimDate = new Date(claim.dateOfInjury).toLocaleDateString();
+        const hasDateMatch = entities.potentialDatesOfInjury.some(date => 
+            new Date(date).toLocaleDateString() === claimDate
+        );
+        
+        if (hasDateMatch) {
+            totalScore += SCORE_WEIGHTS.DATE_OF_INJURY;
+            matchedFields.push('dateOfInjury');
+            matchDetails.dateOfInjury = { matched: true, score: SCORE_WEIGHTS.DATE_OF_INJURY };
+        }
+    }
+
+    // Employer Name Matching (15 points)
+    if (entities.potentialEmployerNames?.length > 0 && claim.employerName) {
+        const hasEmployerMatch = entities.potentialEmployerNames.some(employer =>
+            JaroWinklerDistance(claim.employerName.toLowerCase(), employer.toLowerCase()) > 0.8
+        );
+        
+        if (hasEmployerMatch) {
+            totalScore += SCORE_WEIGHTS.EMPLOYER_NAME;
+            matchedFields.push('employerName');
+            matchDetails.employer = { matched: true, score: SCORE_WEIGHTS.EMPLOYER_NAME };
+        }
+    }
+
+    // Physician Name Matching (15 points)
+    if (entities.potentialPhysicianNames?.length > 0 && claim.physicianName) {
+        const hasPhysicianMatch = entities.potentialPhysicianNames.some(physician =>
+            JaroWinklerDistance(claim.physicianName.toLowerCase(), physician.toLowerCase()) > 0.8
+        );
+        
+        if (hasPhysicianMatch) {
+            totalScore += SCORE_WEIGHTS.PHYSICIAN_NAME;
+            matchedFields.push('physicianName');
+            matchDetails.physician = { matched: true, score: SCORE_WEIGHTS.PHYSICIAN_NAME };
+        }
+    }
 
     return {
         score: totalScore,
         matchedFields,
+        matchDetails,
         confidence: totalScore / 100,
         details: {
             claimNumber: claim.claimnumber,
-            claimantName: claim.name,
-            dateOfInjury: claim.date,
-            physicianName: claim.physicianName,
+            name: claim.name,
             employerName: claim.employerName,
-            injuryDescription: claim.injuryDescription
-        }
+            dateOfInjury: claim.dateOfInjury,
+            physicianName: claim.physicianName
+        },
+        isRecommended: totalScore >= 40 // Threshold for recommendation
     };
 };
 
