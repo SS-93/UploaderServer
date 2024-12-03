@@ -48,6 +48,7 @@ exports.performNER = async (req, res) => {
         `;
 
         const response = await openai.chat.completions.create({
+            
             model: "gpt-4",
             messages: [{ role: "user", content: prompt }],
             temperature: 0.3,
@@ -161,16 +162,22 @@ const calculateMatchScore = (entities, claim) => {
 // Add this new endpoint after performNER and before saveUpdatedEntities
 exports.getSuggestedClaims = async (req, res) => {
     const { OcrId } = req.params;
+    
+    if (!OcrId || OcrId === 'undefined') {
+        return res.status(400).json({ 
+            error: 'Invalid OcrId provided',
+            details: 'OcrId must be a valid number'
+        });
+    }
 
     try {
-        // Fetch document with entities
-        let document = await ParkedUpload.findOne({ OcrId });
+        const document = await ParkedUpload.findOne({ OcrId: Number(OcrId) });
+        
         if (!document) {
-            document = await Upload.findOne({ OcrId });
-        }
-
-        if (!document) {
-            return res.status(404).json({ error: 'Document not found' });
+            return res.status(404).json({
+                error: 'Document not found',
+                details: `No document found with OcrId: ${OcrId}`
+            });
         }
 
         if (!document.entities) {
@@ -219,66 +226,66 @@ exports.getSuggestedClaims = async (req, res) => {
 
 // Keep existing saveUpdatedEntities export
 exports.saveUpdatedEntities = async (req, res) => {
-    const { OcrId, updatedEntities, documents } = req.body;
-    console.log('Received OcrId:', OcrId);
-    console.log('Received entities:', updatedEntities);
-
-    if (!OcrId || !updatedEntities) {
-        return res.status(400).json({ error: 'OcrId and updatedEntities are required' });
-    }
-
-    // No need for transformation, as keys are already in the correct format
-    const transformedEntities = {
-        potentialClaimNumbers: updatedEntities.potentialClaimNumbers || [],
-        potentialClaimantNames: updatedEntities.potentialClaimantNames || [],
-        potentialEmployerNames: updatedEntities.potentialEmployerNames || [],
-        potentialInsurerNames: updatedEntities.potentialInsurerNames || [],
-        potentialMedicalProviderNames: updatedEntities.potentialMedicalProviderNames || [],
-        potentialPhysicianNames: updatedEntities.potentialPhysicianNames || [],
-        potentialDatesOfBirth: updatedEntities.potentialDatesOfBirth || [],
-        potentialDatesOfInjury: updatedEntities.potentialDatesOfInjury || [],
-        potentialInjuryDescriptions: updatedEntities.potentialInjuryDescriptions || []
-    };
-
-    console.log('Transformed entities:', transformedEntities);
-
     try {
-        // Try to update ParkedUpload first
-        let document = await ParkedUpload.findOneAndUpdate(
-            { OcrId: OcrId },
-            { $set: { entities: transformedEntities } },
-            { new: true }
-        );
+        const { OcrId, updatedEntities } = req.body;
 
-        // If not found in ParkedUpload, try Upload
-        if (!document) {
-            document = await Upload.findOneAndUpdate(
-                { OcrId: OcrId },
-                { $set: { entities: transformedEntities } },
-                { new: true }
-            );
+        if (!OcrId || !updatedEntities) {
+            return res.status(400).json({ message: 'Missing OcrId or entities' });
         }
 
-        if (!document) {
-            return res.status(404).json({ error: 'Document not found' });
-        }
-        
-        const updatePromises = documents.map(async ({ OcrId, entities }) => {
-            const document = await ParkedUpload.findOne({ OcrId });
-            if (!document) throw new Error('Document not found');
+        // Find document
+        let document = await Upload.findOne({ OcrId }) || 
+                      await ParkedUpload.findOne({ OcrId });
 
-            document.entities = entities;
-            await document.save();
+        if (!document) {
+            return res.status(404).json({ message: 'Document not found' });
+        }
+
+        // Update entities
+        document.entities = updatedEntities;
+
+        // Get match results using MatchingLogic
+        const matchResults = await MatchingLogic.findMatchingClaims(updatedEntities);
+
+        // Create new match history entry
+        const matchHistoryEntry = {
+            matchedAt: new Date(),
+            score: matchResults.topScore,
+            matchedFields: matchResults.matchResults[0]?.matches.matchedFields || [],
+            totalMatches: matchResults.totalMatches,
+            topScore: matchResults.topScore,
+            allMatches: matchResults.matchResults,
+            isRecommended: matchResults.matchResults[0]?.isRecommended || false
+        };
+
+        // Add to match history array
+        document.matchHistory.push(matchHistoryEntry);
+
+        // Update best match if this is the highest score
+        if (!document.bestMatch.score || matchResults.topScore > document.bestMatch.score) {
+            document.bestMatch = {
+                score: matchResults.topScore,
+                allMatches: matchResults.matchResults,
+                matchedAt: new Date()
+            };
+        }
+
+        await document.save();
+
+        res.json({
+            message: 'Entities and match history updated successfully',
+            entities: document.entities,
+            matchResults,
+            matchHistory: document.matchHistory
         });
 
-        await Promise.all(updatePromises);
-
-        res.json({ message: 'Entities saved successfully' });
     } catch (error) {
         console.error('Error saving entities:', error);
-        res.status(500).json({ error: 'Failed to save entities' });
+        res.status(500).json({ 
+            message: 'Failed to save entities',
+            error: error.message 
+        });
     }
-    
 };
 
 // exports.findMatches = async (req, res) => {

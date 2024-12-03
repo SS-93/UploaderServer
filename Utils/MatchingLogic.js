@@ -8,12 +8,12 @@ const { JaroWinklerDistance } = natural;
 
 // Scoring weights configuration
 const SCORE_WEIGHTS = {
-    CLAIM_NUMBER: 10,
-    NAME: 20,
+    CLAIM_NUMBER: 15,
+    NAME: 25,
     EMPLOYER_NAME: 15,
-    PHYSICIAN_NAME: 10,
-    DATE_OF_INJURY: 20,
-    INJURY_DESCRIPTION: 25
+    PHYSICIAN_NAME: 15,
+    DATE_OF_INJURY: 15,
+    INJURY_DESCRIPTION: 15
 };
 
 // Utility functions
@@ -185,7 +185,7 @@ const calculateMatchScore = (documentEntities, claim) => {
             dateOfInjury: claim.dateOfInjury,
             physicianName: claim.physicianName
         },
-        isRecommended: totalScore >= 40 // Threshold for recommendation
+        isRecommended: totalScore >= 30 // Reduced from 40 to 30
     };
 };
 

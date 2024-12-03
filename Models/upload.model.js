@@ -1,118 +1,88 @@
 const mongoose = require('mongoose');
 
-// 1. First, define the EntitySchema
-const EntitySchema = new mongoose.Schema({
-  potentialClaimNumbers: [String],
-  potentialClaimantNames: [String],
-  potentialEmployerNames: [String],
-  potentialInsurerNames: [String],
-  potentialMedicalProviderNames: [String],
-  potentialPhysicianNames: [String],
-  potentialDatesOfBirth: [String],
-  potentialDatesOfInjury: [String],
-  potentialInjuryDescriptions: [String]
-}, { _id: false });
+// Schema for individual match details (new)
+const matchDetailSchema = new mongoose.Schema({
+    claimNumber: String,
+    claimantName: String,
+    physicianName: String,
+    dateOfInjury: Date,
+    employerName: String,
+    injuryDescription: String
+});
 
-// 2. Define MatchDetailSchema before using it
-const MatchDetailSchema = new mongoose.Schema({
-    score: { type: Number, required: true },
-    matchedAt: { type: Date, default: Date.now },
+// Schema for individual matches (new)
+const matchResultSchema = new mongoose.Schema({
+    score: Number,
     matchedFields: [String],
     confidence: {
         claimNumber: Number,
         name: Number,
-        employerName: Number,
+        physicianName: Number,
         dateOfInjury: Number,
-        physicianName: Number
+        employerName: Number,
+        injuryDescription: Number
     },
+    claim: matchDetailSchema,
+    isRecommended: Boolean
+});
+
+// Updated match history schema
+const matchHistorySchema = new mongoose.Schema({
+    matchedAt: { type: Date, default: Date.now },
+    score: Number,
+    matchedFields: [String],
+    confidence: Object,
     matchDetails: {
         claimNumber: String,
-        name: String,
-        employerName: String,
-        dateOfInjury: Date,
-        physicianName: String
-    },
-    isRecommended: { type: Boolean, default: false },
-    claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim' }
-});
-
-// 3. Define MatchHistorySchema after MatchDetailSchema
-const MatchHistorySchema = new mongoose.Schema({
-    processedAt: { type: Date, default: Date.now },
-    score: { type: Number, required: true },
-    isRecommended: { type: Boolean, default: false },
-    matches: MatchDetailSchema,
-    claim: {
-        id: { type: mongoose.Schema.Types.ObjectId, ref: 'ClaimModel' },
-        claimNumber: String,
-        name: String,
-        date: Date,
-        adjuster: String,
-        employerName: String,
-        injuryDescription: String,
+        claimantName: String,
         physicianName: String,
-        dateOfBirth: Date
-    }
+        dateOfInjury: Date,
+        employerName: String
+    },
+    isRecommended: Boolean,
+    // New fields
+    totalMatches: { type: Number, default: 0 },
+    topScore: { type: Number, default: 0 },
+    allMatches: { type: [matchResultSchema], default: [] }
 });
 
-// 4. Define ParkingSchema after all required schemas
-const ParkingSchema = new mongoose.Schema({
-    fileName: { type: String, required: true },
-    fileUrl: { type: String, required: true },
-    mimetype: { type: String, required: true },
-    uploadDate: { type: Date, default: Date.now },
-    textContent: { type: String, default: '' },
-    category: { type: String, default: 'Uncategorized' },
+// Main upload schema (maintaining existing structure)
+const uploadSchema = new mongoose.Schema({
     OcrId: { type: Number, required: true, unique: true },
-    entities: { type: EntitySchema },
-    matchHistory: [MatchDetailSchema],
+    fileName: String,
+    fileUrl: String,
+    mimetype: String,
+    textContent: String,
+    category: String,
+    uploadDate: { type: Date, default: Date.now },
+    // Keep existing entities schema
+    entities: {
+        potentialClaimNumbers: [String],
+        potentialClaimantNames: [String],
+        potentialEmployerNames: [String],
+        potentialInsurerNames: [String],
+        potentialMedicalProviderNames: [String],
+        potentialPhysicianNames: [String],
+        potentialDatesOfBirth: [Date],
+        potentialDatesOfInjury: [Date],
+        potentialInjuryDescriptions: [String]
+    },
+    matchHistory: [matchHistorySchema],
+    // Updated best match schema
     bestMatch: {
         score: Number,
-        claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim' },
-        matchedAt: Date
+        claimId: String,
+        matchedAt: Date,
+        matchDetails: matchDetailSchema,
+        allMatches: [matchResultSchema]
     },
     processingStatus: {
         isProcessed: { type: Boolean, default: false },
-        lastProcessed: Date,
-        error: String
+        lastProcessed: Date
     }
 });
 
-// 5. Define UploadSchema after all required schemas
-const UploadSchema = new mongoose.Schema({
-    filename: { type: String, required: true },
-    originalName: { type: String, required: true },
-    fileUrl: { type: String, required: true },
-    mimetype: { type: String, required: true },
-    claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim', required: true },
-    OcrId: { type: Number, required: true },
-    uploadDate: { type: Date, default: Date.now },
-    textContent: { type: String, default: '' },
-    category: { type: String, default: 'Uncategorized' },
-    entities: { type: EntitySchema },
-    matchHistory: [MatchDetailSchema],
-    bestMatch: {
-        score: Number,
-        claimId: { type: mongoose.Schema.Types.ObjectId, ref: 'Claim' },
-        matchedAt: Date
-    },
-    sortingHistory: [{
-        attemptedAt: { type: Date, default: Date.now },
-        success: Boolean,
-        method: { type: String, enum: ['auto', 'manual'] },
-        targetClaimId: mongoose.Schema.Types.ObjectId,
-        score: Number,
-        error: String
-    }]
-});
+const Upload = mongoose.model('Upload', uploadSchema);
+const ParkedUpload = mongoose.model('ParkedUpload', uploadSchema);
 
-// 6. Create models after all schemas are defined
-const ParkedUpload = mongoose.model('ParkedUpload', ParkingSchema);
-const Upload = mongoose.model('Upload', UploadSchema);
-const MatchHistory = mongoose.model('MatchHistory', MatchHistorySchema);
-
-module.exports = { 
-    Upload, 
-    ParkedUpload,
-    MatchHistory 
-};
+module.exports = { Upload, ParkedUpload };
