@@ -127,4 +127,44 @@ exports.getBatchMatchHistory = async (req, res) => {
             error: error.message 
         });
     }
+};
+
+exports.getDocumentMatchDetails = async (req, res) => {
+    try {
+        const { OcrId } = req.params;
+        
+        if (!OcrId) {
+            return res.status(400).json({ 
+                message: 'OcrId is required' 
+            });
+        }
+
+        const upload = await Upload.findOne({ OcrId }) || await ParkedUpload.findOne({ OcrId });
+        
+        if (!upload) {
+            return res.status(404).json({
+                message: 'Document not found'
+            });
+        }
+
+        // Return combined document and match details
+        res.json({
+            documentInfo: {
+                OcrId: upload.OcrId,
+                fileName: upload.fileName,
+                category: upload.category,
+                entities: upload.entities
+            },
+            matchHistory: upload.matchHistory.sort((a, b) => b.matchedAt - a.matchedAt),
+            bestMatch: upload.bestMatch,
+            processingStatus: upload.processingStatus
+        });
+
+    } catch (error) {
+        console.error('Error fetching document match details:', error);
+        res.status(500).json({ 
+            message: 'Failed to fetch document match details',
+            error: error.message 
+        });
+    }
 }; 
