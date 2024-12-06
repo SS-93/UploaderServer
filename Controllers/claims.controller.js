@@ -685,4 +685,21 @@ router.get('/claims/:claimId/documents/search', async (req, res) => {
   }
 });
 
+// Add this new route
+router.get('/find-by-number/:claimNumber', async (req, res) => {
+    try {
+        const singleClaim = await Claim.findOne({ 
+            claimnumber: req.params.claimNumber 
+        });
+
+        if (!singleClaim) {
+            return res.status(404).json({ message: 'Claim not found' });
+        }
+
+        res.status(200).json({ found: singleClaim });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to find claim' });
+    }
+});
+
 module.exports = router;

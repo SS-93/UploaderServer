@@ -18,6 +18,6 @@ router.post('/match-claims', aiController.findMatches);
 router.post('/auto-sort-batch', aiController.autoSortBatch);
 router.get('/batch-status/:batchId', aiController.getBatchStatus); // For checking batch progress
 
-
+router.get('/model-metrics', aiController.getModelMetrics);
 
 module.exports = router;

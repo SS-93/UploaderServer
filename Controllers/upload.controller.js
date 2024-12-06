@@ -185,39 +185,89 @@ exports.updateMultipleDocuments = async (req, res) => {
 };
 
 exports.sortDocumentToClaim = async (req, res) => {
-  const { OcrId, claimId } = req.params;
+    const { claimId, OcrId } = req.params;
+    const { matchScore, claimNumber } = req.body;
+    
+    console.log('\n=== Processing Sort Request ===');
+    console.log('Target Details:', {
+        claimId,
+        OcrId,
+        claimNumber,
+        matchScore
+    });
+    
+    try {
+        // Find claim by ID
+        const claim = await Claim.findById(claimId);
+        
+        if (!claim) {
+            console.log('Claim not found:', claimId);
+            return res.status(404).json({ message: 'Target claim not found' });
+        }
 
-  try {
-    const parkedDocument = await ParkedUpload.findOne({ OcrId });
+        console.log('Found Claim:', {
+            id: claim._id,
+            claimNumber: claim.claimnumber,
+            documentsCount: claim.documents?.length || 0
+        });
 
-    if (!parkedDocument) {
-      return res.status(404).json({ message: 'Document not found in parked uploads' });
+        // Find document
+        const document = await Upload.findOne({ OcrId }) || 
+                        await ParkedUpload.findOne({ OcrId });
+
+        if (!document) {
+            console.log('Document not found:', OcrId);
+            return res.status(404).json({ message: 'Document not found' });
+        }
+
+        console.log('Found Document:', {
+            OcrId: document.OcrId,
+            fileName: document.fileName,
+            collection: document.collection.name,
+            hasMatchHistory: !!document.matchHistory?.length
+        });
+
+        // Create new document object with all fields
+        const newDocument = {
+            fileName: document.fileName,
+            fileUrl: document.fileUrl,
+            uploadDate: document.uploadDate || new Date(),
+            textContent: document.textContent,
+            category: document.category,
+            OcrId: document.OcrId,
+            entities: document.entities,
+            matchHistory: document.matchHistory,
+            processingStatus: document.processingStatus
+        };
+
+        // Add document to claim
+        claim.documents.push(newDocument);
+        const savedClaim = await claim.save();
+
+        console.log('Document Transfer Complete:', {
+            fromCollection: document.collection.name,
+            toClaimId: claim._id,
+            newDocumentCount: savedClaim.documents.length,
+            documentOcrId: document.OcrId
+        });
+
+        // Remove from original collection
+        if (document.collection.name === 'parkeduploads') {
+            await ParkedUpload.findOneAndDelete({ OcrId });
+        } else {
+            await Upload.findOneAndDelete({ OcrId });
+        }
+
+        res.status(200).json({ 
+            message: 'Document sorted successfully', 
+            document: newDocument,
+            claimNumber: claim.claimnumber
+        });
+
+    } catch (error) {
+        console.error('Sort operation failed:', error);
+        res.status(500).json({ error: 'Failed to sort document' });
     }
-
-    const claim = await Claim.findById(claimId);
-    if (!claim) {
-      return res.status(404).json({ message: 'Claim not found' });
-    }
-
-    const newDocument = {
-      OcrId: parkedDocument.OcrId,
-      fileName: parkedDocument.filename,
-      fileUrl: parkedDocument.fileUrl,
-      uploadDate: parkedDocument.uploadDate,
-      textContent: parkedDocument.textContent,
-      category: parkedDocument.category
-    };
-
-    claim.documents.push(newDocument);
-    await claim.save();
-
-    await ParkedUpload.findOneAndDelete({ OcrId });
-
-    res.status(200).json({ message: 'Document sorted to claim successfully', document: newDocument });
-  } catch (error) {
-    console.error('Error sorting document to claim:', error);
-    res.status(500).json({ error: 'Failed to sort document to claim' });
-  }
 };
 
 exports.saveOcrText = async (req, res) => {

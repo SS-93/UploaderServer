@@ -5,6 +5,7 @@ const ClaimModel = require('../Models/claims.model');
 const { JaroWinklerDistance } = natural;
 const MatchingLogic = require('../Utils/MatchingLogic'); // Ensure proper import
 const matchHistoryController = require('../Controllers/matchHistory.controller');
+const ModelTracker = require('../utils/modelTracker');
 
 
 const openai = new OpenAI({
@@ -22,14 +23,32 @@ const SCORE_WEIGHTS = {
 };
 
 exports.performNER = async (req, res) => {
-    const { text, OcrId } = req.body;
+    const { text, OcrId, modelName = 'gpt-3.5-turbo' } = req.body;
 
     if (!text) {
         return res.status(400).json({ error: 'Text is required' });
     }
 
     try {
-        // Perform NER with existing prompt
+        const startTime = Date.now();
+        
+        const models = {
+            // 'gpt-4': {
+            //     model: "gpt-4",
+            //     temperature: 0.3
+            // },
+            'gpt-3.5-turbo': {
+                model: "gpt-3.5-turbo",
+                temperature: 0.3
+            },
+            'gpt-3.5-turbo-instruct': {
+                model: "gpt-3.5-turbo-instruct",
+                temperature: 0.3
+            }
+        };
+
+        const modelConfig = models[modelName] || models['gpt-3.5-turbo'];
+        
         const prompt = `
             Analyze the following text and extract these entities:
             1. potentialClaimNumbers: Any sequence of numbers and letters that could represent a claim number.
@@ -48,13 +67,22 @@ exports.performNER = async (req, res) => {
         `;
 
         const response = await openai.chat.completions.create({
-            
-            model: "gpt-4",
+            ...modelConfig,
             messages: [{ role: "user", content: prompt }],
-            temperature: 0.3,
         });
 
         const entities = JSON.parse(response.choices[0].message.content);
+        
+        const endTime = Date.now();
+        
+        // Track performance
+        const performanceMetrics = await ModelTracker.trackModelPerformance(
+            modelName,
+            startTime,
+            endTime,
+            text.length,
+            entities
+        );
 
         // If OcrId is provided, save entities
         if (OcrId) {
@@ -95,7 +123,8 @@ exports.performNER = async (req, res) => {
             return res.json({
                 entities: transformedEntities,
                 document,
-                matchResults
+                matchResults,
+                performanceMetrics
             });
         }
 
@@ -544,5 +573,21 @@ exports.getBatchStatus = async (req, res) => {
     }
     
     res.json(status);
+};
+
+// Add new endpoint to get metrics
+exports.getModelMetrics = async (req, res) => {
+    try {
+        const metrics = ModelTracker.getMetrics();
+        const comparison = ModelTracker.getModelComparison();
+        
+        res.json({
+            metrics,
+            comparison
+        });
+    } catch (error) {
+        console.error('Error fetching metrics:', error);
+        res.status(500).json({ error: 'Failed to fetch metrics' });
+    }
 };
 

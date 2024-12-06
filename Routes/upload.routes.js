@@ -13,7 +13,7 @@ router.post('/bulk-upload', uploadController.uploadMiddleware, uploadController.
 router.post('/upload', uploadController.uploadMiddleware, uploadController.uploadSingleFile);
 
 // Sort document to claim
-router.post('/move-document/:claimId/:OcrId', uploadController.sortDocumentToClaim);
+router.post('/sort-to-claim/:claimNumber/:OcrId', uploadController.sortDocumentToClaim);
 
 // Get image
 router.get('/images/:key', uploadController.handleGetImage);
@@ -68,7 +68,8 @@ router.post('/save-entities', aiController.saveUpdatedEntities);
 
 router.get('/suggested-claims/:OcrId', aiController.getSuggestedClaims);
 
-
+router.post('/sort/:claimId/:OcrId', uploadController.sortDocumentToClaim);   
+router.post('/sort-document/:claimId/:OcrId', uploadController.sortDocumentToClaim); 
 
 
 module.exports = router;

@@ -20,6 +20,35 @@ const DocumentSchema = new mongoose.Schema ({
         required: false, 
         unique: false,
     },
+    entities: {
+        potentialClaimNumbers: [String],
+        potentialClaimantNames: [String],
+        potentialEmployerNames: [String],
+        potentialInsurerNames: [String],
+        potentialMedicalProviderNames: [String],
+        potentialPhysicianNames: [String],
+        potentialDatesOfBirth: [Date],
+        potentialDatesOfInjury: [Date],
+        potentialInjuryDescriptions: [String]
+    },
+    matchHistory: [{
+        matchedAt: { type: Date, default: Date.now },
+        score: Number,
+        matchedFields: [String],
+        confidence: Object,
+        matchDetails: {
+            claimNumber: String,
+            claimantName: String,
+            physicianName: String,
+            dateOfInjury: Date,
+            employerName: String
+        },
+        isRecommended: Boolean
+    }],
+    processingStatus: {
+        isProcessed: { type: Boolean, default: false },
+        lastProcessed: Date
+    }
 });
 
 const MatchHistorySchema = new mongoose.Schema({
