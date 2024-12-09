@@ -8,12 +8,15 @@ const { JaroWinklerDistance } = natural;
 
 // Scoring weights configuration
 const SCORE_WEIGHTS = {
-    CLAIM_NUMBER: 15,
-    NAME: 25,
-    EMPLOYER_NAME: 15,
-    PHYSICIAN_NAME: 15,
-    DATE_OF_INJURY: 15,
-    INJURY_DESCRIPTION: 15
+    PRIMARY: {
+        CLAIM_NUMBER: 30,
+        NAME: 25,
+        DATE_OF_INJURY: 20
+    },
+    SECONDARY: {
+        EMPLOYER_NAME: 15,
+        PHYSICIAN_NAME: 10
+    }
 };
 
 // Utility functions
@@ -41,6 +44,37 @@ const normalizeString = (str) => {
 //         return null; // Return null to indicate invalid date
 //     }
 // };
+
+
+const testMatchScoring = (documentEntities, claim) => {
+    console.log('\n=== TEST MATCH SCORING ===');
+    
+    // Test each field individually
+    const scores = {
+        claimNumber: 0,
+        name: 0,
+        employer: 0,
+        date: 0,
+        physician: 0
+    };
+
+    // Test claim number
+    const normalizedClaimNumber = claim.claimnumber.replace(/[^a-z0-9]/gi, '').toLowerCase();
+    documentEntities.potentialClaimNumbers.forEach(docNum => {
+        const normalizedDocNum = docNum.replace(/[^a-z0-9]/gi, '').toLowerCase();
+        if (normalizedDocNum === normalizedClaimNumber) {
+            scores.claimNumber = SCORE_WEIGHTS.CLAIM_NUMBER;
+            console.log(`Claim number match: ${docNum} = ${claim.claimnumber}`);
+        }
+    });
+
+    // Continue with other fields...
+    
+    console.log('Individual Scores:', scores);
+    console.log('Total Score:', Object.values(scores).reduce((a, b) => a + b, 0));
+    
+    return scores;
+};
 
 // Simplified date handling
 const normalizeDate = (dateStr) => {
@@ -96,96 +130,63 @@ const computeCosineSimilarity = (tfidf, doc1Index, doc2Index) => {
 
 // Main scoring function
 const calculateMatchScore = (documentEntities, claim) => {
-    let totalScore = 0;
-    const matchedFields = [];
-    const matchDetails = {};
+    console.log('Starting match calculation for:', {
+        claimNumber: claim.claimnumber,
+        documentEntities: JSON.stringify(documentEntities, null, 2)
+    });
 
-    // Parse the documentEntities if it's a string
-    const entities = typeof documentEntities === 'string' ? 
-        JSON.parse(documentEntities) : documentEntities;
+    let score = {
+        total: 0,
+        breakdown: {},
+        matches: [],
+        confidence: {}
+    };
 
-    // Claim Number Matching (30 points)
-    if (entities.potentialClaimNumbers?.length > 0) {
-        const normalizedClaimNumber = claim.claimnumber.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const hasClaimMatch = entities.potentialClaimNumbers.some(docNum => {
-            const normalizedDocNum = docNum.toLowerCase().replace(/[^a-z0-9]/g, '');
-            return normalizedDocNum === normalizedClaimNumber;
-        });
+    // Claim Number Match (30 points)
+    if (documentEntities.potentialClaimNumbers?.length) {
+        const hasClaimMatch = documentEntities.potentialClaimNumbers.some(docNum => 
+            docNum.replace(/[^a-z0-9]/gi, '').toLowerCase() === 
+            claim.claimnumber.replace(/[^a-z0-9]/gi, '').toLowerCase()
+        );
         
         if (hasClaimMatch) {
-            totalScore += SCORE_WEIGHTS.CLAIM_NUMBER;
-            matchedFields.push('claimNumber');
-            matchDetails.claimNumber = { matched: true, score: SCORE_WEIGHTS.CLAIM_NUMBER };
+            score.total += SCORE_WEIGHTS.PRIMARY.CLAIM_NUMBER;
+            score.breakdown.claimNumber = SCORE_WEIGHTS.PRIMARY.CLAIM_NUMBER;
+            score.matches.push('claimNumber');
+            score.confidence.claimNumber = 1;
         }
     }
 
-    // Claimant Name Matching (30 points)
-    if (entities.potentialClaimantNames?.length > 0 && claim.name) {
-        const normalizedClaimName = claim.name.toLowerCase();
-        const hasNameMatch = entities.potentialClaimantNames.some(name => 
-            JaroWinklerDistance(normalizedClaimName, name.toLowerCase()) > 0.8
+    // Name Match (25 points)
+    if (documentEntities.potentialClaimantNames?.length && claim.name) {
+        const bestNameMatch = Math.max(
+            ...documentEntities.potentialClaimantNames.map(name => 
+                JaroWinklerDistance(normalizeString(name), normalizeString(claim.name))
+            )
         );
         
-        if (hasNameMatch) {
-            totalScore += SCORE_WEIGHTS.NAME;
-            matchedFields.push('name');
-            matchDetails.name = { matched: true, score: SCORE_WEIGHTS.NAME };
-        }
-    }
-
-    // Date of Injury Matching (20 points)
-    if (entities.potentialDatesOfInjury?.length > 0 && claim.dateOfInjury) {
-        const claimDate = new Date(claim.dateOfInjury).toLocaleDateString();
-        const hasDateMatch = entities.potentialDatesOfInjury.some(date => 
-            new Date(date).toLocaleDateString() === claimDate
-        );
-        
-        if (hasDateMatch) {
-            totalScore += SCORE_WEIGHTS.DATE_OF_INJURY;
-            matchedFields.push('dateOfInjury');
-            matchDetails.dateOfInjury = { matched: true, score: SCORE_WEIGHTS.DATE_OF_INJURY };
-        }
-    }
-
-    // Employer Name Matching (15 points)
-    if (entities.potentialEmployerNames?.length > 0 && claim.employerName) {
-        const hasEmployerMatch = entities.potentialEmployerNames.some(employer =>
-            JaroWinklerDistance(claim.employerName.toLowerCase(), employer.toLowerCase()) > 0.8
-        );
-        
-        if (hasEmployerMatch) {
-            totalScore += SCORE_WEIGHTS.EMPLOYER_NAME;
-            matchedFields.push('employerName');
-            matchDetails.employer = { matched: true, score: SCORE_WEIGHTS.EMPLOYER_NAME };
-        }
-    }
-
-    // Physician Name Matching (15 points)
-    if (entities.potentialPhysicianNames?.length > 0 && claim.physicianName) {
-        const hasPhysicianMatch = entities.potentialPhysicianNames.some(physician =>
-            JaroWinklerDistance(claim.physicianName.toLowerCase(), physician.toLowerCase()) > 0.8
-        );
-        
-        if (hasPhysicianMatch) {
-            totalScore += SCORE_WEIGHTS.PHYSICIAN_NAME;
-            matchedFields.push('physicianName');
-            matchDetails.physician = { matched: true, score: SCORE_WEIGHTS.PHYSICIAN_NAME };
+        if (bestNameMatch > 0.9) {
+            score.total += SCORE_WEIGHTS.PRIMARY.NAME;
+            score.breakdown.name = SCORE_WEIGHTS.PRIMARY.NAME;
+            score.matches.push('name');
+            score.confidence.name = bestNameMatch;
         }
     }
 
     return {
-        score: totalScore,
-        matchedFields,
-        matchDetails,
-        confidence: totalScore / 100,
-        details: {
+        score: score.total,
+        confidence: score.confidence,
+        details: score.breakdown,
+        matchedFields: score.matches,
+        isRecommended: score.total >= 70,
+        claim: {
+            id: claim._id,
             claimNumber: claim.claimnumber,
             name: claim.name,
             employerName: claim.employerName,
-            dateOfInjury: claim.dateOfInjury,
+            dateOfInjury: claim.date,
             physicianName: claim.physicianName
-        },
-        isRecommended: totalScore >= 30 // Reduced from 40 to 30
+        }
     };
 };
 
@@ -193,10 +194,19 @@ const calculateMatchScore = (documentEntities, claim) => {
 const findMatchingClaims = async (documentEntities) => {
     try {
         const allClaims = await Claim.find();
-        const matchResults = allClaims.map(claim => {
+        console.log(`Testing against ${allClaims.length} claims`);
+
+        const matchResults = await Promise.all(allClaims.map(async (claim) => {
+            // Run detailed test scoring
+            const testResults = await testMatchScoring(documentEntities, claim);
+            console.log(`Test results for claim ${claim.claimnumber}:`, testResults);
+
+            // Continue with regular scoring...
             const matchScore = calculateMatchScore(documentEntities, claim);
+            
             return {
                 score: matchScore.score,
+                testScore: testResults.totalScore, // Add test score for comparison
                 matches: {
                     matchedFields: matchScore.matchedFields,
                     details: {
@@ -219,7 +229,7 @@ const findMatchingClaims = async (documentEntities) => {
                     physicianName: claim.physicianName
                 }
             };
-        });
+        }));
 
         const filteredResults = matchResults
             .filter(result => result.isRecommended)
@@ -238,7 +248,10 @@ const findMatchingClaims = async (documentEntities) => {
             matchResults: []
         };
     }
+
+
 };
+
 
 module.exports = { findMatchingClaims };
 
