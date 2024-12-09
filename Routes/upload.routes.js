@@ -70,6 +70,8 @@ router.get('/suggested-claims/:OcrId', aiController.getSuggestedClaims);
 
 router.post('/sort/:claimId/:OcrId', uploadController.sortDocumentToClaim);   
 router.post('/sort-document/:claimId/:OcrId', uploadController.sortDocumentToClaim); 
+// New unified sort route
+router.post('/sort-documents', uploadController.sortDocuments);
 
-
+router.post('/bulk-sort-documents', uploadController.bulkSortDocuments)
 module.exports = router;

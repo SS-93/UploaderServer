@@ -457,4 +457,219 @@ exports.getSignedUrl = async (req, res) => {
 
 exports.uploadMiddleware = upload.array('documents', 10);
 
+exports.sortDocuments = async (req, res) => {
+    const { documents } = req.body;
+    // documents should be an array of { OcrId, claimId, matchScore } objects
+    
+    console.log('\n=== Processing Bulk Sort Request ===');
+    console.log('Documents to process:', documents.length);
+    
+    const results = {
+        successful: [],
+        failed: [],
+        processingTime: null
+    };
+
+    const startTime = Date.now();
+
+    try {
+        // Process documents in parallel using Promise.all
+        await Promise.all(documents.map(async (doc) => {
+            try {
+                // First find the claim using claimNumber
+                const claimResponse = await fetch(
+                    `http://localhost:4000/claims/find-by-number/${doc.claimNumber}`
+                );
+                
+                if (!claimResponse.ok) {
+                    throw new Error(`Claim not found for document ${doc.OcrId}`);
+                }
+                
+                const claimData = await claimResponse.json();
+                const claimId = claimData.found._id;
+
+                // Find document in either collection
+                const document = await Upload.findOne({ OcrId: doc.OcrId }) || 
+                                await ParkedUpload.findOne({ OcrId: doc.OcrId });
+
+                if (!document) {
+                    throw new Error('Document not found');
+                }
+
+                // Create new document object
+                const newDocument = {
+                    fileName: document.fileName,
+                    fileUrl: document.fileUrl,
+                    uploadDate: document.uploadDate || new Date(),
+                    textContent: document.textContent,
+                    category: document.category,
+                    OcrId: document.OcrId,
+                    entities: document.entities,
+                    matchHistory: document.matchHistory,
+                    processingStatus: 'sorted',
+                    sortedAt: new Date(),
+                    matchScore: doc.matchScore
+                };
+
+                // Add to claim
+                await Claim.findByIdAndUpdate(
+                    claimId,
+                    { $push: { documents: newDocument } },
+                    { new: true }
+                );
+
+                // Remove from original collection
+                if (document.collection.name === 'parkeduploads') {
+                    await ParkedUpload.findOneAndDelete({ OcrId: doc.OcrId });
+                } else {
+                    await Upload.findOneAndDelete({ OcrId: doc.OcrId });
+                }
+
+                results.successful.push({
+                    OcrId: doc.OcrId,
+                    claimNumber: doc.claimNumber,
+                    matchScore: doc.matchScore,
+                    message: 'Document sorted successfully'
+                });
+
+            } catch (error) {
+                results.failed.push({
+                    OcrId: doc.OcrId,
+                    error: error.message
+                });
+            }
+        }));
+
+        results.processingTime = Date.now() - startTime;
+
+        console.log('Bulk Sort Results:', {
+            totalProcessed: documents.length,
+            successful: results.successful.length,
+            failed: results.failed.length,
+            processingTime: `${results.processingTime}ms`
+        });
+
+        res.status(200).json({
+            message: 'Bulk sort operation complete',
+            results
+        });
+
+    } catch (error) {
+        console.error('Bulk sort operation failed:', error);
+        res.status(500).json({ 
+            error: 'Failed to process bulk sort operation',
+            details: error.message
+        });
+    }
+};
+
+exports.bulkSortDocuments = async (req, res) => {
+    const { documents } = req.body;
+    
+    console.log('\n=== Processing Bulk Sort Request ===');
+    console.log('Documents to process:', documents.length);
+    console.log('Document details:', documents);
+    
+    const results = {
+        successful: [],
+        failed: [],
+        processingTime: null
+    };
+
+    const startTime = Date.now();
+
+    try {
+        await Promise.all(documents.map(async (doc) => {
+            try {
+                // Find claim by claim number
+                const claim = await Claim.findOne({ 
+                    claimnumber: doc.claimNumber 
+                });
+
+                if (!claim) {
+                    throw new Error(`Claim ${doc.claimNumber} not found`);
+                }
+
+                // Find document in either collection
+                const document = await Upload.findOne({ OcrId: doc.OcrId }) || 
+                                await ParkedUpload.findOne({ OcrId: doc.OcrId });
+
+                if (!document) {
+                    throw new Error(`Document with OcrId ${doc.OcrId} not found`);
+                }
+
+                // Create new document object
+                const newDocument = {
+                    fileName: document.fileName || document.originalName,
+                    fileUrl: document.fileUrl,
+                    uploadDate: document.uploadDate || new Date(),
+                    textContent: document.textContent || '',
+                    category: document.category || 'Uncategorized',
+                    OcrId: document.OcrId,
+                    entities: document.entities || [],
+                    matchHistory: document.matchHistory || [],
+                    processingStatus: 'sorted',
+                    sortedAt: new Date(),
+                    matchScore: doc.matchScore
+                };
+
+                // Add to claim
+                await Claim.findByIdAndUpdate(
+                    claim._id,
+                    { 
+                        $push: { documents: newDocument },
+                        $set: { lastUpdated: new Date() }
+                    },
+                    { new: true }
+                );
+
+                // Remove from original collection
+                const sourceCollection = document.collection.name === 'parkeduploads' 
+                    ? ParkedUpload 
+                    : Upload;
+                
+                await sourceCollection.findOneAndDelete({ OcrId: doc.OcrId });
+
+                results.successful.push({
+                    OcrId: doc.OcrId,
+                    claimNumber: doc.claimNumber,
+                    matchScore: doc.matchScore,
+                    message: `Document sorted to claim ${doc.claimNumber}`
+                });
+
+            } catch (error) {
+                console.error(`Error processing document ${doc.OcrId}:`, error);
+                results.failed.push({
+                    OcrId: doc.OcrId,
+                    claimNumber: doc.claimNumber,
+                    error: error.message
+                });
+            }
+        }));
+
+        results.processingTime = Date.now() - startTime;
+
+        console.log('Bulk Sort Results:', {
+            totalProcessed: documents.length,
+            successful: results.successful.length,
+            failed: results.failed.length,
+            processingTime: `${results.processingTime}ms`,
+            failedDetails: results.failed
+        });
+
+        res.status(200).json({
+            message: 'Bulk sort operation complete',
+            results
+        });
+
+    } catch (error) {
+        console.error('Bulk sort operation failed:', error);
+        res.status(500).json({ 
+            error: 'Failed to process bulk sort operation',
+            details: error.message,
+            documents: documents
+        });
+    }
+};
+
 
