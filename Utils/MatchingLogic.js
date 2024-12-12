@@ -77,22 +77,36 @@ const testMatchScoring = (documentEntities, claim) => {
 };
 
 // Simplified date handling
-const normalizeDate = (dateStr) => {
-    if (!dateStr) return '';
+const normalizeDate = (input) => {
+    // Handle empty or null input
+    if (!input) return '';
     
-    // Remove any non-numeric characters and get an array of numbers
-    const numbers = dateStr.split(/\D+/).filter(n => n);
-    
-    // If we have at least 3 numbers (month, day, year), try to format
-    if (numbers.length >= 3) {
-        const month = numbers[0].padStart(2, '0');
-        const day = numbers[1].padStart(2, '0');
-        const year = numbers[2].length === 2 ? `20${numbers[2]}` : numbers[2];
-        return `${month}${day}${year}`;
+    // Convert input to string if it's not already
+    let dateStr = input;
+    if (input instanceof Date) {
+        dateStr = input.toISOString();
+    } else if (typeof input !== 'string') {
+        dateStr = String(input);
     }
     
-    // If date parsing fails, return the original string normalized
-    return dateStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+    try {
+        // Remove any non-numeric characters and get an array of numbers
+        const numbers = dateStr.replace(/[^\d]/g, ' ').trim().split(/\s+/);
+        
+        // If we have at least 3 numbers (month, day, year), try to format
+        if (numbers.length >= 3) {
+            const month = numbers[0].padStart(2, '0');
+            const day = numbers[1].padStart(2, '0');
+            const year = numbers[2].length === 2 ? `20${numbers[2]}` : numbers[2];
+            return `${month}${day}${year}`;
+        }
+        
+        // If date parsing fails, return the original string normalized
+        return dateStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+    } catch (error) {
+        console.warn('Error normalizing date:', error, 'Input:', input);
+        return '';
+    }
 };
 
 const calculateTFIDF = (documents) => {
@@ -171,7 +185,57 @@ const calculateMatchScore = (documentEntities, claim) => {
             score.matches.push('name');
             score.confidence.name = bestNameMatch;
         }
+
+         // Date of Injury Match (20 points)
+    if (documentEntities.potentialDatesOfInjury?.length && claim.dateOfInjury) {
+        const normalizedClaimDate = normalizeDate(claim.dateOfInjury);
+        const hasDateMatch = documentEntities.potentialDatesOfInjury.some(docDate => 
+            normalizeDate(docDate) === normalizedClaimDate
+        );
+        
+        if (hasDateMatch) {
+            score.total += SCORE_WEIGHTS.PRIMARY.DATE_OF_INJURY;
+            score.breakdown.dateOfInjury = SCORE_WEIGHTS.PRIMARY.DATE_OF_INJURY;
+            score.matches.push('dateOfInjury');
+            score.confidence.dateOfInjury = 1;
+        }
     }
+
+    // Employer Name Match (15 points)
+    if (documentEntities.potentialEmployerNames?.length && claim.employerName) {
+        const bestEmployerMatch = Math.max(
+            ...documentEntities.potentialEmployerNames.map(empName => 
+                JaroWinklerDistance(normalizeString(empName), normalizeString(claim.employerName))
+            )
+        );
+
+        if (bestEmployerMatch > 0.85) {
+            score.total += SCORE_WEIGHTS.SECONDARY.EMPLOYER_NAME;
+            score.breakdown.employerName = SCORE_WEIGHTS.SECONDARY.EMPLOYER_NAME;
+            score.matches.push('employerName');
+            score.confidence.employerName = bestEmployerMatch;
+        }
+    }
+
+    // Physician Name Match (10 points)
+    if (documentEntities.potentialPhysicianNames?.length && claim.physicianName) {
+        const bestPhysicianMatch = Math.max(
+            ...documentEntities.potentialPhysicianNames.map(physName => 
+                JaroWinklerDistance(normalizeString(physName), normalizeString(claim.physicianName))
+            )
+        );
+
+        if (bestPhysicianMatch > 0.8) {
+            score.total += SCORE_WEIGHTS.SECONDARY.PHYSICIAN_NAME;
+            score.breakdown.physicianName = SCORE_WEIGHTS.SECONDARY.PHYSICIAN_NAME;
+            score.matches.push('physicianName');
+            score.confidence.physicianName = bestPhysicianMatch;
+        }
+    }
+    }
+
+    console.log(`Matched Fields: ${score.matches.join(', ')}`);
+    console.log(`Total Score: ${score.total}`);
 
     return {
         score: score.total,

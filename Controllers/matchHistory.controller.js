@@ -134,20 +134,34 @@ exports.getDocumentMatchDetails = async (req, res) => {
         const { OcrId } = req.params;
         
         if (!OcrId) {
-            return res.status(400).json({ 
-                message: 'OcrId is required' 
-            });
+            return res.status(400).json({ message: 'OcrId is required' });
         }
 
         const upload = await Upload.findOne({ OcrId }) || await ParkedUpload.findOne({ OcrId });
         
         if (!upload) {
-            return res.status(404).json({
-                message: 'Document not found'
-            });
+            return res.status(404).json({ message: 'Document not found' });
         }
 
-        // Return combined document and match details
+        // Transform match history to match the expected format
+        const transformedMatchHistory = upload.matchHistory.map(match => ({
+            score: match.score,
+            matches: {
+                matchedFields: match.matchedFields || [],
+                confidence: match.confidence || {},
+                details: match.matchDetails || {}
+            },
+            isRecommended: match.isRecommended,
+            claim: {
+                id: match.matchDetails?.claimId,
+                claimNumber: match.matchDetails?.claimNumber,
+                name: match.matchDetails?.claimantName,
+                employerName: match.matchDetails?.employerName,
+                dateOfInjury: match.matchDetails?.dateOfInjury,
+                physicianName: match.matchDetails?.physicianName
+            }
+        }));
+
         res.json({
             documentInfo: {
                 OcrId: upload.OcrId,
@@ -155,9 +169,9 @@ exports.getDocumentMatchDetails = async (req, res) => {
                 category: upload.category,
                 entities: upload.entities
             },
-            matchHistory: upload.matchHistory.sort((a, b) => b.matchedAt - a.matchedAt),
-            bestMatch: upload.bestMatch,
-            processingStatus: upload.processingStatus
+            matchResults: transformedMatchHistory,
+            totalMatches: transformedMatchHistory.length,
+            topScore: Math.max(...transformedMatchHistory.map(m => m.score), 0)
         });
 
     } catch (error) {

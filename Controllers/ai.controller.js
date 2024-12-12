@@ -22,6 +22,49 @@ const SCORE_WEIGHTS = {
     PHYSICIAN_NAME: 15
 };
 
+// Utility functions
+const normalizeString = (str) => {
+    if (!str) return '';
+    return str.toLowerCase()
+        .replace(/[^a-z0-9\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+};
+
+// Simplified date handling
+const normalizeDate = (input) => {
+    // Handle empty or null input
+    if (!input) return '';
+    
+    // Convert input to string if it's not already
+    let dateStr = input;
+    if (input instanceof Date) {
+        dateStr = input.toISOString();
+    } else if (typeof input !== 'string') {
+        dateStr = String(input);
+    }
+    
+    try {
+        // Remove any non-numeric characters and get an array of numbers
+        const numbers = dateStr.replace(/[^\d]/g, ' ').trim().split(/\s+/);
+        
+        // If we have at least 3 numbers (month, day, year), try to format
+        if (numbers.length >= 3) {
+            const month = numbers[0].padStart(2, '0');
+            const day = numbers[1].padStart(2, '0');
+            const year = numbers[2].length === 2 ? `20${numbers[2]}` : numbers[2];
+            return `${month}${day}${year}`;
+        }
+        
+        // If date parsing fails, return the original string normalized
+        return dateStr.toLowerCase().replace(/[^a-z0-9]/g, '');
+    } catch (error) {
+        console.warn('Error normalizing date:', error, 'Input:', input);
+        return '';
+    }
+};
+
+
 exports.performNER = async (req, res) => {
     const { text, OcrId, modelName = 'gpt-3.5-turbo' } = req.body;
 
@@ -39,13 +82,15 @@ exports.performNER = async (req, res) => {
             // },
             'gpt-3.5-turbo': {
                 model: "gpt-3.5-turbo",
-                temperature: 0.3
-            },
-            'gpt-3.5-turbo-instruct': {
-                model: "gpt-3.5-turbo-instruct",
-                temperature: 0.3
+                temperature: 0.3,
+                max_tokens: 2000, // Add token limit
             }
-        };
+        }
+        //     'gpt-3.5-turbo-instruct': {
+        //         model: "gpt-3.5-turbo-instruct",
+        //         temperature: 0.3
+        //     }
+        // };
 
         const modelConfig = models[modelName] || models['gpt-3.5-turbo'];
         
@@ -167,6 +212,50 @@ const calculateMatchScore = (entities, claim) => {
             totalScore += SCORE_WEIGHTS.NAME * bestNameMatch;
             matches.matchedFields.push('name');
             matches.confidence.name = bestNameMatch;
+        }
+    }
+
+    // Date of Injury Matching
+    if (entities.potentialDatesOfInjury?.length > 0) {
+        const claimDate = claim.date ? new Date(claim.date) : null;
+        if (claimDate) {
+            const normalizedClaimDate = claimDate.toISOString().split('T')[0].replace(/-/g, '');
+            const hasDateMatch = entities.potentialDatesOfInjury.some(docDate => {
+                const normalizedDocDate = normalizeDate(docDate);
+                return normalizedDocDate === normalizedClaimDate;
+            });
+            
+            if (hasDateMatch) {
+                totalScore += SCORE_WEIGHTS.DATE_OF_INJURY;
+                matches.matchedFields.push('dateOfInjury');
+                matches.confidence.dateOfInjury = 1;
+            }
+        }
+    }
+
+    // Employer Name Matching
+    if (entities.potentialEmployerNames?.length > 0 && claim.employerName) {
+        const bestEmployerMatch = Math.max(...entities.potentialEmployerNames.map(
+            docEmployer => JaroWinklerDistance(docEmployer.toLowerCase(), claim.employerName.toLowerCase())
+        ));
+
+        if (bestEmployerMatch > 0.9) {
+            totalScore += SCORE_WEIGHTS.EMPLOYER_NAME * bestEmployerMatch;
+            matches.matchedFields.push('employerName');
+            matches.confidence.employerName = bestEmployerMatch;
+        }
+    }
+
+    // Physician Name Matching
+    if (entities.potentialPhysicianNames?.length > 0 && claim.physicianName) {
+        const bestPhysicianMatch = Math.max(...entities.potentialPhysicianNames.map(
+            docPhysician => JaroWinklerDistance(docPhysician.toLowerCase(), claim.physicianName.toLowerCase())
+        ));
+
+        if (bestPhysicianMatch > 0.9) {
+            totalScore += SCORE_WEIGHTS.PHYSICIAN_NAME * bestPhysicianMatch;
+            matches.matchedFields.push('physicianName');
+            matches.confidence.physicianName = bestPhysicianMatch;
         }
     }
 
@@ -362,7 +451,7 @@ exports.findMatches = async (req, res) => {
         const matchResults = claims.map(claim => {
             console.log('Starting match calculation for:', {
                 claimNumber: claim.claimnumber,
-                documentEntities: JSON.stringify(entities, null, 2)
+                entities: JSON.stringify(entities, null, 2)
             });
 
             const result = calculateMatchScore(entities, claim);
@@ -410,41 +499,54 @@ exports.getSuggestedClaimsById = async (req, res) => {
         const { OcrId } = req.params;
         console.log('Fetching suggested claims for OcrId:', OcrId);
 
-        // Find the document with this OcrId
-        const document = await Upload.findOne({ OcrId: parseInt(OcrId) });
+        // Find the document
+        const document = await Upload.findOne({ OcrId: parseInt(OcrId) }) || 
+                        await ParkedUpload.findOne({ OcrId: parseInt(OcrId) });
+                        
         if (!document) {
-            return res.status(404).json({ error: 'Document not found' });
+            return res.status(404).json({ 
+                error: 'Document not found',
+                details: `No document found with OcrId: ${OcrId}`
+            });
         }
 
         // Get the document's entities
         const entities = document.entities || {};
-        console.log('Document entities:', entities);
-
-        // Get all claims
         const claims = await ClaimModel.find();
-        console.log(`Processing ${claims.length} claims for matching`);
-
-        // Calculate match scores using the existing calculateMatchScore function
+        
+        // Calculate match scores
         const matchResults = claims
-            .map(claim => ({
-                ...calculateMatchScore(entities, claim),
-                claim: {
-                    id: claim._id,
-                    claimNumber: claim.claimnumber,
-                    name: claim.name,
-                    employerName: claim.employerName,
-                    dateOfInjury: claim.date
-                }
-            }))
+            .map(claim => {
+                const matchScore = calculateMatchScore(entities, claim);
+                return {
+                    score: matchScore.totalScore,
+                    matches: matchScore.matches,
+                    isRecommended: matchScore.totalScore >= 70,
+                    claim: {
+                        id: claim._id,
+                        claimNumber: claim.claimnumber,
+                        name: claim.name,
+                        employerName: claim.employerName,
+                        dateOfInjury: claim.date,
+                        physicianName: claim.physicianName
+                    }
+                };
+            })
             .filter(result => result.score >= 40)
             .sort((a, b) => b.score - a.score);
 
-        console.log(`Found ${matchResults.length} potential matches`);
-        
-        res.json({ matchResults });
+        return res.json({
+            matchResults,
+            totalMatches: matchResults.length,
+            topScore: matchResults.length > 0 ? matchResults[0].score : 0
+        });
+
     } catch (error) {
-        console.error('Error in suggested-claims:', error);
-        res.status(500).json({ error: 'Failed to fetch suggested claims' });
+        console.error('Error in getSuggestedClaimsById:', error);
+        return res.status(500).json({ 
+            error: 'Failed to fetch suggested claims',
+            details: error.message
+        });
     }
 };
 

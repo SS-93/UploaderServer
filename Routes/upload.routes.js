@@ -66,7 +66,7 @@ router.post('/perform-ner', aiController.performNER);
 // New route for saving updated entities
 router.post('/save-entities', aiController.saveUpdatedEntities);
 
-router.get('/suggested-claims/:OcrId', aiController.getSuggestedClaims);
+// router.get('/suggested-claims/:OcrId', aiController.getSuggestedClaims);
 
 router.post('/sort/:claimId/:OcrId', uploadController.sortDocumentToClaim);   
 router.post('/sort-document/:claimId/:OcrId', uploadController.sortDocumentToClaim); 
