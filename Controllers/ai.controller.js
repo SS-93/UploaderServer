@@ -17,9 +17,9 @@ const SCORE_WEIGHTS = {
     CLAIM_NUMBER: 30,
     NAME: 30,
     DATE_OF_INJURY: 20,
-    EMPLOYER_NAME: 15,
+    EMPLOYER_NAME: 30,
     INJURY_DESCRIPTION: 20,
-    PHYSICIAN_NAME: 15
+    PHYSICIAN_NAME: 20
 };
 
 // Utility functions
@@ -259,6 +259,28 @@ const calculateMatchScore = (entities, claim) => {
         }
     }
 
+    // Then add the injury description matching logic after the physician matching
+// Injury Description Matching
+if (entities.potentialInjuryDescriptions?.length > 0 && claim.injuryDescription) {
+    const bestInjuryMatch = Math.max(...entities.potentialInjuryDescriptions.map(
+        docInjury => JaroWinklerDistance(
+            docInjury.toLowerCase(), 
+            claim.injuryDescription.toLowerCase()
+        )
+    ));
+
+    if (bestInjuryMatch > 0.8) {  // Slightly lower threshold for injury descriptions
+        totalScore += SCORE_WEIGHTS.INJURY_DESCRIPTION * bestInjuryMatch;
+        matches.matchedFields.push('injuryDescription');
+        matches.confidence.injuryDescription = bestInjuryMatch;
+        matches.details.injuryMatch = {
+            documentDescription: entities.potentialInjuryDescriptions[0],
+            claimDescription: claim.injuryDescription,
+            similarity: bestInjuryMatch
+        };
+    }
+}
+
     // Calculate final score
     const TOTAL_POSSIBLE_SCORE = Object.values(SCORE_WEIGHTS).reduce((a, b) => a + b, 0);
     const percentageScore = (totalScore / TOTAL_POSSIBLE_SCORE) * 100;
@@ -266,7 +288,7 @@ const calculateMatchScore = (entities, claim) => {
     return {
         score: Math.round(percentageScore * 100) / 100,
         matches,
-        isRecommended: percentageScore >= 75,
+        isRecommended: percentageScore >= 60,
         claim: {
             id: claim._id,
             claimNumber: claim.claimnumber,

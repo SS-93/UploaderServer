@@ -14,8 +14,8 @@ const SCORE_WEIGHTS = {
         DATE_OF_INJURY: 20
     },
     SECONDARY: {
-        EMPLOYER_NAME: 15,
-        PHYSICIAN_NAME: 10
+        EMPLOYER_NAME: 30,
+        PHYSICIAN_NAME: 30
     }
 };
 
