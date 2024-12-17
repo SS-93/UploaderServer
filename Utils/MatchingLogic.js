@@ -242,7 +242,7 @@ const calculateMatchScore = (documentEntities, claim) => {
         confidence: score.confidence,
         details: score.breakdown,
         matchedFields: score.matches,
-        isRecommended: score.total >= 70,
+        isRecommended: score.total >= 60,
         claim: {
             id: claim._id,
             claimNumber: claim.claimnumber,

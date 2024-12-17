@@ -535,6 +535,23 @@ exports.getSuggestedClaimsById = async (req, res) => {
             .filter(result => result.score >= 40)
             .sort((a, b) => b.score - a.score);
 
+        if (matchResults.length > 0) {
+            // Find the top scoring match
+            const topMatch = matchResults.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+            
+            // Update the 'bestMatch' field
+            document.bestMatch = {
+                score: topMatch.score,
+                matchedFields: topMatch.matches,
+                matchDetails: topMatch.matchDetails,
+                isRecommended: topMatch.isRecommended,
+                claim: topMatch.claim
+            };
+            
+            // Save the updated document
+            await document.save();
+        }
+
         return res.json({
             matchResults,
             totalMatches: matchResults.length,
