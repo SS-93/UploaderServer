@@ -18,7 +18,11 @@
     "natural": "^8.0.1",
     "openai": "^4.67.3",
     "pdf-lib": "^1.17.1",
+    "seed": "^0.4.4",
     "sharp": "^0.33.4",
     "tesseract.js": "^4.1.1"
+  },
+  "scripts": {
+    "seed": "node ./seedClaims.js"
   }
 }
